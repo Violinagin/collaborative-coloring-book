@@ -4,7 +4,7 @@ export interface Artwork {
     artist: string;
     artistId: string;
     lineArtUrl: string;
-    colorizedVersions: ColorizedVersion[];;
+    colorizedVersions: ColorizedVersion[];
     likes: string[];
     comments: Comment[];
     createdAt: Date;
