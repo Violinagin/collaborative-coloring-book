@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { mockArtworks, Artwork } from '../data/mockData';
+import LikeButton from '../components/LikeButton';
+import { useLikes } from '../context/LikesContext';
 
 // Define your navigation types
 type RootStackParamList = {
@@ -27,6 +29,7 @@ interface RenderItemProps {
 
 const GalleryScreen = ({ navigation }: Props) => {
   // Properly typed render function
+  const { artworks, toggleLike, isLiked, getLikeCount } = useLikes();
   const renderArtworkItem: ListRenderItem<Artwork> = ({ item }) => (
     <TouchableOpacity 
       style={styles.artworkCard}
@@ -40,6 +43,14 @@ const GalleryScreen = ({ navigation }: Props) => {
       <View style={styles.artworkInfo}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={styles.artist}>by {item.artist}</Text>
+        <View style={styles.likeContainer}>
+          <LikeButton 
+            isLiked={isLiked(item.id)}
+            likeCount={getLikeCount(item.id)}
+            onPress={() => toggleLike(item.id)}
+            size="small"
+          />
+        </View>
         <View style={styles.stats}>
           <Text style={styles.stat}>
             {item.colorizedVersions.length} colorizations
@@ -55,7 +66,7 @@ const GalleryScreen = ({ navigation }: Props) => {
   return (
     <View style={styles.container}>
       <FlatList
-        data={mockArtworks}
+        data={artworks}
         renderItem={renderArtworkItem}
         keyExtractor={(item: Artwork) => item.id}
         numColumns={2}
@@ -110,6 +121,10 @@ const styles = StyleSheet.create({
   stat: {
     fontSize: 12,
     color: '#888',
+  },
+  likeContainer: {
+    marginTop: 8,
+    alignItems: 'flex-start', // Align like button to the left
   },
 });
 

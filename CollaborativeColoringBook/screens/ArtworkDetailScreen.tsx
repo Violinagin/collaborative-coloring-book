@@ -10,14 +10,15 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Artwork } from '../data/mockData';
 import { RootStackParamList } from '../types/navigation';
+import LikeButton from '../components/LikeButton';
+import { useLikes } from '../context/LikesContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
-  // SAFE: Check if artwork exists and has the correct type
   const artwork: Artwork | undefined = route.params?.artwork;
+  const { toggleLike, isLiked, getLikeCount } = useLikes();
 
-  // Handle case where artwork is missing
   if (!artwork) {
     return (
       <View style={styles.container}>
@@ -26,7 +27,6 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     );
   }
 
-  // SAFE: Now TypeScript knows artwork exists
   return (
     <ScrollView style={styles.container}>
       {/* Artwork Image */}
@@ -43,16 +43,18 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
         
         {/* Stats */}
         <View style={styles.stats}>
-          <Text style={styles.stat}>{artwork.likes.length} likes</Text>
+        <LikeButton 
+            isLiked={isLiked(artwork.id)}
+            likeCount={getLikeCount(artwork.id)}
+            onPress={() => toggleLike(artwork.id)}
+            size="medium"
+          />
           <Text style={styles.stat}>{artwork.comments.length} comments</Text>
           <Text style={styles.stat}>{artwork.colorizedVersions.length} colorizations</Text>
         </View>
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}>❤️ Like</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.button}>
             <Text style={styles.buttonText}>🎨 Color This</Text>
           </TouchableOpacity>
@@ -130,6 +132,7 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    alignItems: 'center',
     marginBottom: 16,
     padding: 12,
     backgroundColor: 'white',
