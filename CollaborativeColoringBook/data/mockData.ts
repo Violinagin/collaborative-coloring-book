@@ -26,6 +26,13 @@ export interface Comment{
     createdAt: Date;
 }
 
+export interface User {
+    id: string;
+    name: string;
+    avatarUrl?: string;
+    bio?: string;
+}
+
 //Mock Data
 export const mockUsers: User[] = [
     {
@@ -42,8 +49,7 @@ export const mockUsers: User[] = [
     }
 ];
 
-export const mockArtworks:
-Artwork[] = [
+export const mockArtworks: Artwork[] = [
     {
         id: '1',
         title: 'Forest Creatures',
@@ -68,8 +74,8 @@ Artwork[] = [
                 text: 'Loved coloring this! Lots of amazing detail.',
                 createdAt: new Date('2024-01-16')
             }
-        ]
-        createdAt: new
-        Date('2024-01-10')
+        ],
+        createdAt: new Date('2024-01-10')
     }
+    //add more mock artworks here
 ];
