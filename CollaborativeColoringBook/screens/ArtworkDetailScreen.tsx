@@ -1,23 +1,31 @@
-import React from 'react';
+import React, {useState} from 'react';
 import { 
   View, 
   Text, 
   Image, 
   StyleSheet, 
   ScrollView, 
-  TouchableOpacity 
+  TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform, 
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Artwork } from '../data/mockData';
 import { RootStackParamList } from '../types/navigation';
 import LikeButton from '../components/LikeButton';
+import CommentButton from '../components/CommentButton';
 import { useLikes } from '../context/LikesContext';
+import { useComments } from '../context/CommentsContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const artwork: Artwork | undefined = route.params?.artwork;
   const { toggleLike, isLiked, getLikeCount } = useLikes();
+  const { addComment, getComments, getCommentCount } = useComments();
+  const [newComment, setNewComment] = useState('');
+  const [userName] = useState('CurrentUser');
 
   if (!artwork) {
     return (
@@ -26,9 +34,21 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       </View>
     );
   }
+  const handleAddComment = () => {
+    if (newComment.trim()) {
+      addComment(artwork.id, newComment, userName);
+      setNewComment(''); // Clear input after posting
+    }
+  };
+
+  const comments = getComments(artwork.id);
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView style={styles.scrollView}>
       {/* Artwork Image */}
       <Image 
         source={{ uri: artwork.lineArtUrl }} 
@@ -49,8 +69,11 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
             onPress={() => toggleLike(artwork.id)}
             size="medium"
           />
-          <Text style={styles.stat}>{artwork.comments.length} comments</Text>
-          <Text style={styles.stat}>{artwork.colorizedVersions.length} colorizations</Text>
+          <CommentButton 
+              commentCount={getCommentCount(artwork.id)}
+              onPress={() => {}} // Already on comment screen
+              size="medium"
+            />
         </View>
 
         {/* Action Buttons */}
@@ -63,19 +86,48 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           </TouchableOpacity>
         </View>
 
-        {/* Comments Section */}
-        <View style={styles.commentsSection}>
-          <Text style={styles.sectionTitle}>Comments</Text>
-          {artwork.comments.map(comment => (
-            <View key={comment.id} style={styles.comment}>
-              <Text style={styles.commentAuthor}>{comment.userName}:</Text>
-              <Text style={styles.commentText}>{comment.text}</Text>
+        {/* Comment Section */}
+        <View style={styles.addCommentSection}>
+            <Text style={styles.sectionTitle}>Add a Comment</Text>
+            <View style={styles.commentInputContainer}>
+              <TextInput
+                style={styles.commentInput}
+                value={newComment}
+                onChangeText={setNewComment}
+                placeholder="Write your comment..."
+                multiline
+              />
+              <TouchableOpacity 
+                style={[
+                  styles.postButton,
+                  !newComment.trim() && styles.postButtonDisabled
+                ]}
+                onPress={handleAddComment}
+                disabled={!newComment.trim()}
+              >
+                <Text style={styles.postButtonText}>Post</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-          {artwork.comments.length === 0 && (
-            <Text style={styles.noComments}>No comments yet. Be the first!</Text>
-          )}
-        </View>
+          </View>
+
+          {/* Comments List */}
+          <View style={styles.commentsSection}>
+            <Text style={styles.sectionTitle}>
+              Comments ({comments.length})
+            </Text>
+            {comments.map(comment => (
+              <View key={comment.id} style={styles.comment}>
+                <Text style={styles.commentAuthor}>{comment.userName}:</Text>
+                <Text style={styles.commentText}>{comment.text}</Text>
+                <Text style={styles.commentDate}>
+                  {comment.createdAt.toLocaleDateString()}
+                </Text>
+              </View>
+            ))}
+            {comments.length === 0 && (
+              <Text style={styles.noComments}>No comments yet. Be the first!</Text>
+            )}
+          </View>
 
         {/* Colorized Versions */}
         <View style={styles.colorizationsSection}>
@@ -97,6 +149,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
         </View>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -104,6 +157,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  scrollView: {
+    flex: 1,
   },
   errorText: {
     fontSize: 18,
@@ -185,6 +241,44 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     padding: 20,
+  },
+  addCommentSection: {
+    marginBottom: 24,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 8,
+    minHeight: 50,
+    textAlignVertical: 'top',
+  },
+  postButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  postButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  commentDate: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
   },
   colorizationsSection: {
     marginBottom: 24,

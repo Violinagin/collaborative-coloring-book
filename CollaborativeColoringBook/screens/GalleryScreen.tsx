@@ -9,27 +9,20 @@ import {
   ListRenderItem 
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { mockArtworks, Artwork } from '../data/mockData';
+import { Artwork } from '../data/mockData';
+import { RootStackParamList } from '../types/navigation';
 import LikeButton from '../components/LikeButton';
+import CommentButton from '../components/CommentButton';
 import { useLikes } from '../context/LikesContext';
+import { useComments } from '../context/CommentsContext';
 
-// Define your navigation types
-type RootStackParamList = {
-  Gallery: undefined;
-  ArtworkDetail: { artwork: Artwork }; // We'll create this screen later
-};
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
-
-// Type for the renderItem function
-interface RenderItemProps {
-  item: Artwork;
-  navigation: Props['navigation'];
-}
 
 const GalleryScreen = ({ navigation }: Props) => {
   // Properly typed render function
   const { artworks, toggleLike, isLiked, getLikeCount } = useLikes();
+  const { getCommentCount } = useComments();
   const renderArtworkItem: ListRenderItem<Artwork> = ({ item }) => (
     <TouchableOpacity 
       style={styles.artworkCard}
@@ -48,6 +41,11 @@ const GalleryScreen = ({ navigation }: Props) => {
             isLiked={isLiked(item.id)}
             likeCount={getLikeCount(item.id)}
             onPress={() => toggleLike(item.id)}
+            size="small"
+          />
+          <CommentButton 
+            commentCount={getCommentCount(item.id)}
+            onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
             size="small"
           />
         </View>
@@ -125,6 +123,12 @@ const styles = StyleSheet.create({
   likeContainer: {
     marginTop: 8,
     alignItems: 'flex-start', // Align like button to the left
+    flexDirection: 'row',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
 });
 
