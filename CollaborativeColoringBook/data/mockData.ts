@@ -1,3 +1,5 @@
+import { User, Activity } from '../types/User';
+
 export interface Artwork {
     id: string;
     title: string;
@@ -26,26 +28,37 @@ export interface Comment{
     createdAt: Date;
 }
 
-export interface User {
-    id: string;
-    name: string;
-    avatarUrl?: string;
-    bio?: string;
-}
-
 //Mock Data
 export const mockUsers: User[] = [
     {
-        id: '1',
-        name: 'LineArtLover',
+        id: 'user-1',
+        username: 'lineartlover',
+        displayName: 'Line Art Lover',
         avatarUrl: 'https://example.com/avatar1.jpg',
-        bio: 'I love creating all the line art for everyone to color!'
+        bio: 'Passionate about creating intricate line art for others to bring to life with color!',
+        roles: ['line_artist', 'colorist'],
+        joinedDate: new Date('2024-01-01'),
+        followers: ['user-2', 'user-3'],
+        following: ['user-2'],
+        uploadedArtworks: ['1', '2'],
+        colorizedVersions: ['c1'],
+        likedArtworks: ['1'],
+        recentActivity: []
     },
     {
-        id: '2',
-        name: 'ColorMaster',
+        id: 'user-2', 
+        username: 'colormaster',
+        displayName: 'Color Master',
         avatarUrl: 'https://example.com/avatar2.jpg',
-        bio: 'Bringing line art to life wiht color!'
+        bio: 'Bringing line art to life with vibrant colors!',
+        roles: ['colorist'],
+        joinedDate: new Date('2024-01-15'),
+        followers: ['user-1'],
+        following: ['user-1'],
+        uploadedArtworks: [],
+        colorizedVersions: ['c1'],
+        likedArtworks: ['1'],
+        recentActivity: []
     }
 ];
 
@@ -54,22 +67,22 @@ export const mockArtworks: Artwork[] = [
         id: '1',
         title: 'Forest Creatures',
         artist: 'LineArtLover',
-        artistId: '1',
+        artistId: 'user-1',
         lineArtUrl: 'https://example.com/forest-lineart.png',
         colorizedVersions: [
             {
                 id: 'c1',
                 colorist: 'ColorMaster',
-                coloristId: '2',
+                coloristId: 'user-2',
                 coloredImageUrl: 'https://example.com/forest-colored.png',
                 createdAt: new Date('2024-01-15')
             }
         ],
-        likes: ['2'],
+        likes: ['user-2'],
         comments: [
             {
                 id: 'cm1',
-                userId: '2',
+                userId: 'user-2',
                 userName: 'ColorMaster',
                 text: 'Loved coloring this! Lots of amazing detail.',
                 createdAt: new Date('2024-01-16')

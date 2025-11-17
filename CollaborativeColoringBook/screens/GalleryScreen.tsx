@@ -48,6 +48,12 @@ const GalleryScreen = ({ navigation }: Props) => {
             onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
             size="small"
           />
+          <TouchableOpacity 
+            style={styles.testButton}
+            onPress={() => navigation.navigate('Profile', { userId: 'user-1' })}
+            >
+            <Text>👤 Test Profile</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.stats}>
           <Text style={styles.stat}>
@@ -130,6 +136,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 8,
   },
+  testButton: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    zIndex: 1000,
+  }
 });
 
 export default GalleryScreen;

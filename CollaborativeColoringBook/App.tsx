@@ -6,6 +6,7 @@ import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
 import { RootStackParamList } from './types/navigation';
 import { LikesProvider } from './context/LikesContext';
 import { CommentsProvider } from './context/CommentsContext';
+import ProfileScreen from './screens/ProfileScreen';
 
 // Create the navigator with your specific types
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -16,6 +17,11 @@ export default function App() {
       <LikesProvider>
         <NavigationContainer>
           <Stack.Navigator initialRouteName="Gallery">
+            <Stack.Screen 
+              name="Profile" 
+              component={ProfileScreen}
+              options={{ title: 'Profile' }}
+/>
             <Stack.Screen 
               name="Gallery" 
               component={GalleryScreen}

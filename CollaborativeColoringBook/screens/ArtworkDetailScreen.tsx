@@ -69,20 +69,14 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
             onPress={() => toggleLike(artwork.id)}
             size="medium"
           />
-          <CommentButton 
-              commentCount={getCommentCount(artwork.id)}
-              onPress={() => {}} // Already on comment screen
-              size="medium"
-            />
+          <Text style={styles.stat}>{getCommentCount(artwork.id)} comments 💬</Text>
+          <Text style={styles.stat}>{artwork.colorizedVersions.length} colorizations 🎨</Text>
         </View>
 
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity style={styles.button}>
             <Text style={styles.buttonText}>🎨 Color This</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}>💬 Comment</Text>
           </TouchableOpacity>
         </View>
 
@@ -187,7 +181,7 @@ const styles = StyleSheet.create({
   },
   stats: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
     padding: 12,
@@ -197,16 +191,19 @@ const styles = StyleSheet.create({
   stat: {
     fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
+    flex: 1,
   },
   actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginBottom: 24,
   },
   button: {
     flex: 1,
     marginHorizontal: 4,
-    padding: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     backgroundColor: '#007AFF',
     borderRadius: 8,
     alignItems: 'center',
