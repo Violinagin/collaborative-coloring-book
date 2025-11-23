@@ -1,4 +1,5 @@
-import React, {useState} from 'react';
+// screens/ArtworkDetailScreen.tsx - UPDATED VERSION
+import React, {useState, useEffect} from 'react';
 import { 
   View, 
   Text, 
@@ -9,39 +10,134 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform, 
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Artwork } from '../data/mockData';
 import { RootStackParamList } from '../types/navigation';
 import LikeButton from '../components/LikeButton';
+import { Artwork, Comment } from '../types/User';
 import CommentButton from '../components/CommentButton';
 import { useLikes } from '../context/LikesContext';
 import { useComments } from '../context/CommentsContext';
+import { useAuth } from '../context/AuthContext';
+import { directSupabaseService } from '../services/directSupabaseService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
-  const artwork: Artwork | undefined = route.params?.artwork;
+  const { user } = useAuth();
+  const artworkFromParams: Artwork | undefined = route.params?.artwork;
   const { toggleLike, isLiked, getLikeCount } = useLikes();
   const { addComment, getComments, getCommentCount } = useComments();
   const [newComment, setNewComment] = useState('');
-  const [userName] = useState('CurrentUser');
+  const [artwork, setArtwork] = useState<Artwork | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [realComments, setRealComments] = useState<Comment[]>([]);
+  const [realLikeCount, setRealLikeCount] = useState(0);
+  const [userLiked, setUserLiked] = useState(false);
 
-  if (!artwork) {
+  // Load real artwork data from Supabase
+  useEffect(() => {
+    if (artworkFromParams) {
+      loadArtworkData(artworkFromParams.id);
+    }
+  }, [artworkFromParams]);
+
+  const loadArtworkData = async (artworkId: string) => {
+    try {
+      setLoading(true);
+      
+      // Use direct service instead of supabaseService
+      const artworks = await directSupabaseService.getArtworks();
+      const foundArtwork = artworks.find(a => a.id === artworkId);
+      
+      if (foundArtwork) {
+        setArtwork(foundArtwork);
+        
+        // Load real comments
+        const comments = await directSupabaseService.getComments(artworkId);
+        setRealComments(comments);
+        
+        // Load real like data
+        const likeCount = await directSupabaseService.getLikeCount(artworkId);
+        setRealLikeCount(likeCount);
+        
+        if (user) {
+          const liked = await directSupabaseService.isLiked(artworkId, user.id);
+          setUserLiked(liked);
+        }
+      } else {
+        setArtwork(artworkFromParams || null);
+      }
+    } catch (error) {
+      console.error('Error loading artwork data:', error);
+      setArtwork(artworkFromParams || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !user || !artwork) return;
+  
+    setSubmittingComment(true);
+    try {
+      const comment = await directSupabaseService.addComment(artwork.id, user.id, newComment.trim());
+      
+      // Update local state
+      setRealComments(prev => [...prev, comment]);
+      setNewComment('');
+      
+      // Also update the context
+      addComment(artwork.id, newComment.trim(), user.displayName);
+      
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      Alert.alert('Error', 'Failed to add comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleLike = async () => {
+    if (!user || !artwork) return;
+  
+    try {
+      const nowLiked = await directSupabaseService.toggleLike(artwork.id, user.id);
+      setUserLiked(nowLiked);
+      
+      // Update like count
+      const newLikeCount = await directSupabaseService.getLikeCount(artwork.id);
+      setRealLikeCount(newLikeCount);
+      
+      // Update context
+      toggleLike(artwork.id);
+      
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  if (!artworkFromParams) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Artwork not found</Text>
       </View>
     );
   }
-  const handleAddComment = () => {
-    if (newComment.trim()) {
-      addComment(artwork.id, newComment, userName);
-      setNewComment(''); // Clear input after posting
-    }
-  };
 
-  const comments = getComments(artwork.id);
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading artwork...</Text>
+      </View>
+    );
+  }
+
+  const currentArtwork = artwork || artworkFromParams;
 
   return (
     <KeyboardAvoidingView 
@@ -49,108 +145,138 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView style={styles.scrollView}>
-      {/* Artwork Image */}
-      <Image 
-        source={{ uri: artwork.lineArtUrl }} 
-        style={styles.artworkImage}
-        resizeMode="contain"
-      />
-      
-      {/* Artwork Info */}
-      <View style={styles.infoContainer}>
-        <Text style={styles.title}>{artwork.title}</Text>
-        <Text style={styles.artist}>by {artwork.artist}</Text>
+        {/* Artwork Image */}
+        <Image 
+          source={{ uri: currentArtwork.lineArtUrl }} 
+          style={styles.artworkImage}
+          resizeMode="contain"
+        />
         
-        {/* Stats */}
-        <View style={styles.stats}>
-        <LikeButton 
-            isLiked={isLiked(artwork.id)}
-            likeCount={getLikeCount(artwork.id)}
-            onPress={() => toggleLike(artwork.id)}
-            size="medium"
-          />
-          <Text style={styles.stat}>{getCommentCount(artwork.id)} comments 💬</Text>
-          <Text style={styles.stat}>{artwork.colorizedVersions.length} colorizations 🎨</Text>
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}>🎨 Color This</Text>
+        {/* Artwork Info */}
+        <View style={styles.infoContainer}>
+          <Text style={styles.title}>{currentArtwork.title}</Text>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Profile', { userId: currentArtwork.artistId })}
+          >
+            <Text style={[styles.artist, styles.clickableArtist]}>by {currentArtwork.artist}</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Comment Section */}
-        <View style={styles.addCommentSection}>
-            <Text style={styles.sectionTitle}>Add a Comment</Text>
-            <View style={styles.commentInputContainer}>
-              <TextInput
-                style={styles.commentInput}
-                value={newComment}
-                onChangeText={setNewComment}
-                placeholder="Write your comment..."
-                multiline
-              />
-              <TouchableOpacity 
-                style={[
-                  styles.postButton,
-                  !newComment.trim() && styles.postButtonDisabled
-                ]}
-                onPress={handleAddComment}
-                disabled={!newComment.trim()}
-              >
-                <Text style={styles.postButtonText}>Post</Text>
-              </TouchableOpacity>
-            </View>
+          
+          {currentArtwork.description && (
+            <Text style={styles.description}>{currentArtwork.description}</Text>
+          )}
+          
+          {/* Stats */}
+          <View style={styles.stats}>
+            <LikeButton 
+              isLiked={userLiked}
+              likeCount={realLikeCount}
+              onPress={handleLike}
+              size="medium"
+            />
+            <Text style={styles.stat}>{realComments.length} comments 💬</Text>
+            <Text style={styles.stat}>{currentArtwork.colorizedVersions.length} colorizations 🎨</Text>
           </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actions}>
+            <TouchableOpacity 
+              style={styles.button}
+              onPress={() => navigation.navigate('Coloring', { artwork: currentArtwork })}
+            >
+              <Text style={styles.buttonText}>🎨 Color This</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Comment Section */}
+          {user && (
+            <View style={styles.addCommentSection}>
+              <Text style={styles.sectionTitle}>Add a Comment</Text>
+              <View style={styles.commentInputContainer}>
+                <TextInput
+                  style={styles.commentInput}
+                  value={newComment}
+                  onChangeText={setNewComment}
+                  placeholder="Write your comment..."
+                  multiline
+                  editable={!submittingComment}
+                />
+                <TouchableOpacity 
+                  style={[
+                    styles.postButton,
+                    (!newComment.trim() || submittingComment) && styles.postButtonDisabled
+                  ]}
+                  onPress={handleAddComment}
+                  disabled={!newComment.trim() || submittingComment}
+                >
+                  {submittingComment ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.postButtonText}>Post</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Comments List */}
           <View style={styles.commentsSection}>
             <Text style={styles.sectionTitle}>
-              Comments ({comments.length})
+              Comments ({realComments.length})
             </Text>
-            {comments.map(comment => (
+            {realComments.map(comment => (
               <View key={comment.id} style={styles.comment}>
                 <Text style={styles.commentAuthor}>{comment.userName}:</Text>
                 <Text style={styles.commentText}>{comment.text}</Text>
                 <Text style={styles.commentDate}>
-                  {comment.createdAt.toLocaleDateString()}
+                  {new Date(comment.createdAt).toLocaleDateString()}
                 </Text>
               </View>
             ))}
-            {comments.length === 0 && (
+            {realComments.length === 0 && (
               <Text style={styles.noComments}>No comments yet. Be the first!</Text>
             )}
           </View>
 
-        {/* Colorized Versions */}
-        <View style={styles.colorizationsSection}>
-          <Text style={styles.sectionTitle}>Colorized Versions</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {artwork.colorizedVersions.map(version => (
-              <TouchableOpacity key={version.id} style={styles.colorizedThumbnail}>
-                <Image 
-                  source={{ uri: version.coloredImageUrl }} 
-                  style={styles.thumbnailImage}
-                />
-                <Text style={styles.colorist}>by {version.colorist}</Text>
-              </TouchableOpacity>
-            ))}
-            {artwork.colorizedVersions.length === 0 && (
-              <Text style={styles.noColorizations}>No colorizations yet. Be the first!</Text>
-            )}
-          </ScrollView>
+          {/* Colorized Versions */}
+          <View style={styles.colorizationsSection}>
+            <Text style={styles.sectionTitle}>Colorized Versions</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {currentArtwork.colorizedVersions.map(version => (
+                <TouchableOpacity key={version.id} style={styles.colorizedThumbnail}>
+                  <Image 
+                    source={{ uri: version.coloredImageUrl }} 
+                    style={styles.thumbnailImage}
+                  />
+                  <Text style={styles.colorist}>by {version.colorist}</Text>
+                </TouchableOpacity>
+              ))}
+              {currentArtwork.colorizedVersions.length === 0 && (
+                <Text style={styles.noColorizations}>No colorizations yet. Be the first!</Text>
+              )}
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
+// Your existing styles remain the same...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   scrollView: {
     flex: 1,
@@ -178,6 +304,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 16,
+  },
+  description: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 16,
+    lineHeight: 20,
   },
   stats: {
     flexDirection: 'row',
@@ -300,6 +432,10 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     padding: 20,
+  },
+  clickableArtist: {
+    color: '#007AFF',
+    textDecorationLine: 'underline',
   },
 });
 

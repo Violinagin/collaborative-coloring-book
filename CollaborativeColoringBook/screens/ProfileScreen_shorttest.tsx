@@ -13,8 +13,8 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { User, UserRole, Artwork } from '../types/User';
-import { useAuth } from '../context/AuthContext';
 import { directSupabaseService } from '../services/directSupabaseService';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -39,41 +39,9 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       navigation.replace('Auth');
       return;
     }
-  
-    // Add a safety timeout to prevent infinite loading
-    const safetyTimeout = setTimeout(() => {
-      if (loading) {
-        console.log('Safety timeout triggered - profile taking too long');
-        setLoading(false);
-        // Create a basic user object to prevent crashes
-        if (!profileUser) {
-          const basicUser: User = {
-            id: userId,
-            username: `user_${userId.slice(0, 8)}`,
-            displayName: 'User',
-            avatarUrl: 'https://via.placeholder.com/80x80.png?text=👤',
-            bio: 'User profile',
-            roles: ['supporter'],
-            joinedDate: new Date(),
-            followers: [],
-            following: [],
-            uploadedArtworks: [],
-            colorizedVersions: [],
-            likedArtworks: [],
-            recentActivity: [],
-          };
-          setProfileUser(basicUser);
-        }
-      }
-    }, 8000); // 8 second safety timeout
-  
-    loadUserProfile();
-  
-    return () => {
-      clearTimeout(safetyTimeout);
-    };
-  }, [userId]);
+  }, [userId, navigation]);
 
+  // Load user profile data with timeout
   const loadUserProfile = async () => {
     if (!userId) return;
     

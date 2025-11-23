@@ -49,6 +49,7 @@ export interface Activity {
     likes: string[];
     comments: Comment[];
     createdAt: Date;
+    description?: string;
   }
   
   export interface ColorizedVersion {
