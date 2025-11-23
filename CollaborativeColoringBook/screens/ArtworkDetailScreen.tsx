@@ -109,7 +109,6 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
 
   const handleLike = async () => {
     if (!user) {
-      // Redirect to auth if not logged in
       navigation.navigate('Auth');
       return;
     }
@@ -117,18 +116,30 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     if (!artwork) return;
   
     try {
+      // Optimistic update
+      const newLikedState = !userLiked;
+      setUserLiked(newLikedState);
+      setRealLikeCount(prev => newLikedState ? prev + 1 : prev - 1);
+  
       const nowLiked = await directSupabaseService.toggleLike(artwork.id, user.id);
-      setUserLiked(nowLiked);
       
-      // Update like count
-      const newLikeCount = await directSupabaseService.getLikeCount(artwork.id);
-      setRealLikeCount(newLikeCount);
+      // If the actual result differs from our optimistic update, correct it
+      if (nowLiked !== newLikedState) {
+        setUserLiked(nowLiked);
+        const actualLikeCount = await directSupabaseService.getLikeCount(artwork.id);
+        setRealLikeCount(actualLikeCount);
+      }
       
-      // Update context
+      // Update context for any components that might still use it
       toggleLike(artwork.id);
       
     } catch (error) {
       console.error('Error toggling like:', error);
+      // Revert optimistic update on error
+      const actualLikeCount = await directSupabaseService.getLikeCount(artwork.id);
+      const actualLikedState = await directSupabaseService.isLiked(artwork.id, user.id);
+      setRealLikeCount(actualLikeCount);
+      setUserLiked(actualLikedState);
     }
   };
 

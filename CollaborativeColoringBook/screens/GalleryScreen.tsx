@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl 
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Artwork } from '../data/mockData';
 import { RootStackParamList } from '../types/navigation';
@@ -24,6 +25,12 @@ import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 const GalleryScreen = ({ navigation }: Props) => {
+  const isFocused = useIsFocused();
+    useEffect(() => {
+      if (isFocused) {
+        loadArtworks();
+      }
+    }, [isFocused]);
   const { state } = useApp();
   const { toggleLike, isLiked, getLikeCount } = useLikes();
   const { getCommentCount } = useComments();
@@ -32,21 +39,49 @@ const GalleryScreen = ({ navigation }: Props) => {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [realLikeData, setRealLikeData] = useState<{[artworkId: string]: {count: number, isLiked: boolean}}>({});
 
   // Load artworks from Supabase - no user dependency
   const loadArtworks = async () => {
     try {
       setLoading(true);
-      const timeoutPromise = new Promise<Artwork[]>((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout loading artworks')), 10000)
-    );
-    
-    const artworksPromise = directSupabaseService.getArtworks();
-      const supabaseArtworks = await Promise.race([artworksPromise, timeoutPromise]);
+      console.log('🖼️ Loading artworks and like data...');
+      
+      const supabaseArtworks = await directSupabaseService.getArtworks();
+      console.log(`✅ Loaded ${supabaseArtworks.length} artworks`);
+      
       setArtworks(supabaseArtworks);
+      
+      // Load like data for ALL artworks first, then update state once
+      const likeData: {[artworkId: string]: {count: number, isLiked: boolean}} = {};
+      
+      // Use Promise.all to load all like data in parallel
+      const likePromises = supabaseArtworks.map(async (artwork) => {
+        const count = await directSupabaseService.getLikeCount(artwork.id);
+        let isLiked = false;
+        
+        if (user) {
+          isLiked = await directSupabaseService.isLiked(artwork.id, user.id);
+        }
+        
+        return { artworkId: artwork.id, count, isLiked };
+      });
+      
+      const likeResults = await Promise.all(likePromises);
+      
+      // Build the likeData object from results
+      likeResults.forEach(result => {
+        likeData[result.artworkId] = {
+          count: result.count,
+          isLiked: result.isLiked
+        };
+      });
+      
+      console.log('✅ Like data loaded for all artworks');
+      setRealLikeData(likeData);
+      
     } catch (error) {
       console.error('Error loading artworks:', error);
-      // Fallback to mock data if Supabase fails
       setArtworks(state.artworks);
     } finally {
       setLoading(false);
@@ -54,10 +89,29 @@ const GalleryScreen = ({ navigation }: Props) => {
     }
   };
 
+// Temporary debug function
+  const debugLikeState = async (artworkId: string) => {
+    if (!user) return;
+    
+    console.log('🐛 DEBUG LIKE STATE:');
+    console.log('Artwork ID:', artworkId);
+    console.log('User ID:', user.id);
+    
+    const dbIsLiked = await directSupabaseService.isLiked(artworkId, user.id);
+    const dbLikeCount = await directSupabaseService.getLikeCount(artworkId);
+    const uiState = realLikeData[artworkId];
+    
+    console.log('Database - isLiked:', dbIsLiked);
+    console.log('Database - likeCount:', dbLikeCount);
+    console.log('UI State:', uiState);
+    console.log('Context - isLiked:', isLiked(artworkId));
+    console.log('Context - likeCount:', getLikeCount(artworkId));
+  };
+
   // Load artworks on component mount
   useEffect(() => {
     loadArtworks();
-  }, []);
+  }, [user]);
 
   // Pull to refresh
   const onRefresh = () => {
@@ -68,77 +122,113 @@ const GalleryScreen = ({ navigation }: Props) => {
   // Handle like - redirect to auth if not logged in
   const handleLike = async (artworkId: string) => {
     if (!user) {
-      // Redirect to auth if not logged in
       navigation.navigate('Auth');
       return;
     }
-
+  
     try {
-      const nowLiked = await directSupabaseService.toggleLike(artworkId, user.id);
-      console.log('✅ Like toggled successfully, now liked:', nowLiked);
+      console.log(`🎯 Toggling like for artwork ${artworkId} by user ${user.id}`);
       
-      // Update local state for immediate feedback
-      toggleLike(artworkId);
+      // Get current state from our local state (not context)
+      const currentLikeState = realLikeData[artworkId]?.isLiked || false;
+      console.log(`📊 Current UI like state: ${currentLikeState}`);
+      
+      // Update UI optimistically first
+      setRealLikeData(prev => ({
+        ...prev,
+        [artworkId]: {
+          count: currentLikeState ? prev[artworkId]?.count - 1 : prev[artworkId]?.count + 1,
+          isLiked: !currentLikeState
+        }
+      }));
+  
+      // Then make the actual database call
+      const nowLiked = await directSupabaseService.toggleLike(artworkId, user.id);
+      console.log(`✅ Database like result: ${nowLiked}`);
+      
+      // Get fresh like count from database to ensure accuracy
+      const newLikeCount = await directSupabaseService.getLikeCount(artworkId);
+      
+      // Update local state with actual database state
+      setRealLikeData(prev => ({
+        ...prev,
+        [artworkId]: {
+          count: newLikeCount,
+          isLiked: nowLiked
+        }
+      }));
+  
+      console.log(`🔄 Final UI state - count: ${newLikeCount}, isLiked: ${nowLiked}`);
       
     } catch (error) {
       console.error('❌ Error toggling like:', error);
+      // Revert optimistic update on error
+      loadArtworks(); // Reload to get correct state
     }
   };
 
-  const renderArtworkItem: ListRenderItem<Artwork> = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.artworkCard}
-      onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
-    >
-      <Image 
-        source={{ uri: item.lineArtUrl }} 
-        style={styles.artworkImage}
-        resizeMode="contain"
-        onError={() => console.log('Error loading image:', item.lineArtUrl)}
-      />
-      <View style={styles.artworkInfo}>
-        <Text style={styles.title}>{item.title}</Text>
-        <TouchableOpacity 
-          onPress={() => {
-            if (item.artistId) {
-              navigation.navigate('Profile', { userId: item.artistId });
-            }
-          }}
-        >
-          <Text style={styles.artist}>by {item.artist}</Text>
-        </TouchableOpacity>
-        
-        {item.description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-        
-        <View style={styles.actionsRow}>
-          <LikeButton 
-            isLiked={isLiked(item.id)}
-            likeCount={getLikeCount(item.id)}
-            onPress={() => handleLike(item.id)}
-            size="small"
-          />
-          <CommentButton 
-            commentCount={getCommentCount(item.id)}
-            onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
-            size="small"
-          />
+  const renderArtworkItem: ListRenderItem<Artwork> = ({ item }) => {
+    // Use ONLY realLikeData, not context
+    const likeInfo = realLikeData[item.id] || { 
+      count: 0, 
+      isLiked: false 
+    };
+    
+    return (
+      <TouchableOpacity 
+        style={styles.artworkCard}
+        onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+      >
+        <Image 
+          source={{ uri: item.lineArtUrl }} 
+          style={styles.artworkImage}
+          resizeMode="contain"
+          onError={() => console.log('Error loading image:', item.lineArtUrl)}
+        />
+        <View style={styles.artworkInfo}>
+          <Text style={styles.title}>{item.title}</Text>
+          <TouchableOpacity 
+            onPress={() => {
+              if (item.artistId) {
+                navigation.navigate('Profile', { userId: item.artistId });
+              }
+            }}
+          >
+            <Text style={styles.artist}>by {item.artist}</Text>
+          </TouchableOpacity>
+          
+          {item.description && (
+            <Text style={styles.description} numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
+          
+          <View style={styles.actionsRow}>
+            <LikeButton 
+              isLiked={likeInfo.isLiked}  // Use realLikeData
+              likeCount={likeInfo.count}   // Use realLikeData
+              onPress={() => handleLike(item.id)}
+              size="small"
+            />
+            <CommentButton 
+              commentCount={getCommentCount(item.id)}
+              onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+              size="small"
+            />
+          </View>
+          
+          <View style={styles.stats}>
+            <Text style={styles.stat}>
+              {item.colorizedVersions.length} colorizations
+            </Text>
+            <Text style={styles.stat}>
+              {likeInfo.count} likes  {/* Use realLikeData */}
+            </Text>
+          </View>
         </View>
-        
-        <View style={styles.stats}>
-          <Text style={styles.stat}>
-            {item.colorizedVersions.length} colorizations
-          </Text>
-          <Text style={styles.stat}>
-            {getLikeCount(item.id)} likes
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (loading && artworks.length === 0) {
     return (
@@ -173,6 +263,15 @@ const GalleryScreen = ({ navigation }: Props) => {
           </View>
         }
       />
+      <TouchableOpacity 
+  style={[styles.debugButton, { backgroundColor: '#4ECDC4', margin: 20 }]}
+  onPress={() => {
+    console.log('🔄 Manually refreshing like states...');
+    loadArtworks();
+  }}
+>
+  <Text style={styles.debugButtonText}>🔄 Refresh Like States</Text>
+</TouchableOpacity>
     </View>
   );
 };
@@ -262,6 +361,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 8,
+  },
+  debugButton: {
+    backgroundColor: '#666',
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginVertical: 8,
+    opacity: 0.8,
+  },
+  debugButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

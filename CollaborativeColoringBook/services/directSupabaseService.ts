@@ -383,10 +383,14 @@ export const directSupabaseService = {
 
   async isLiked(artworkId: string, userId: string): Promise<boolean> {
     try {
+      console.log(`🔍 Checking if user ${userId} liked artwork ${artworkId}`);
+      
       const data = await makeRequest(`likes?select=id&artwork_id=eq.${artworkId}&user_id=eq.${userId}`, {}, true);
+      
+      console.log(`✅ Like check result: ${data.length > 0} (found ${data.length} records)`);
       return data.length > 0;
     } catch (error) {
-      console.error('Error checking like status:', error);
+      console.error('❌ Error checking like status:', error);
       return false;
     }
   },
