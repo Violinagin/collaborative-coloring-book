@@ -257,15 +257,6 @@ const GalleryScreen = ({ navigation }: Props) => {
           </View>
         }
       />
-      <TouchableOpacity 
-  style={[styles.debugButton, { backgroundColor: '#4ECDC4', margin: 20 }]}
-  onPress={() => {
-    console.log('🔄 Manually refreshing like states...');
-    loadArtworks();
-  }}
->
-  <Text style={styles.debugButtonText}>🔄 Refresh Like States</Text>
-</TouchableOpacity>
     </View>
   );
 };

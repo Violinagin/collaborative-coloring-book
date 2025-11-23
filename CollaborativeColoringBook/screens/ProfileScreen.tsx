@@ -496,18 +496,6 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         {activeTab === 'colorWork' && renderColorWorkTab()}
         {activeTab === 'activity' && renderActivityTab()}
       </View>
-
-      {/* Additional Logout Button for Own Profile (at bottom) */}
-      {isOwnProfile && (
-        <View style={styles.bottomLogoutSection}>
-          <TouchableOpacity 
-            style={styles.bottomLogoutButton}
-            onPress={handleLogoutPress}
-          >
-            <Text style={styles.bottomLogoutButtonText}>🚪 Log Out</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </ScrollView>
     {showLogoutModal && (
   <View style={styles.modalOverlay}>
