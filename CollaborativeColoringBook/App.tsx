@@ -12,9 +12,11 @@ import ProfileScreen from './screens/ProfileScreen';
 import ColoringScreen from './screens/ColoringScreen';
 import UploadScreen from './screens/UploadScreen';
 import AuthScreen from './screens/AuthScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import { View, Text } from 'react-native';
 import { supabase } from './lib/supabase';
+
 
 // Create the navigator with your specific types
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -67,6 +69,11 @@ function Navigation() {
               name="Coloring" 
               component={ColoringScreen}
               options={{ title: 'Color This Artwork' }}
+            />
+            <Stack.Screen 
+              name="EditProfile" 
+              component={EditProfileScreen}
+              options={{ title: 'Edit Profile' }}
             />
           </>
         ) : (

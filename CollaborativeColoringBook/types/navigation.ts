@@ -8,4 +8,5 @@ export type RootStackParamList = {
   Coloring: { artwork: Artwork };
   Upload: undefined;
   Auth: undefined;
+  EditProfile: undefined;
 };

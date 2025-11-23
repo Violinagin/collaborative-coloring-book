@@ -297,8 +297,8 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   };
   const renderRoleBadges = (roles: UserRole[]) => {
     const roleLabels = {
-      line_artist: '🎨 Line Artist',
-      colorist: '🖌️ Colorist', 
+      line_artist: '🖌️ Line Artist',
+      colorist: '🎨 Colorist', 
       supporter: '❤️ Supporter'
     };
 
@@ -317,9 +317,12 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     if (isOwnProfile) {
       return (
         <View style={styles.ownProfileActions}>
-          <TouchableOpacity style={styles.editButton}>
-            <Text style={styles.editButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
+          <TouchableOpacity 
+          style={styles.editButton}
+          onPress={() => navigation.navigate('EditProfile')}
+        >
+          <Text style={styles.editButtonText}>Edit Profile</Text>
+        </TouchableOpacity>
           <TouchableOpacity 
             style={styles.logoutButtonSmall}
             onPress={handleLogoutPress}

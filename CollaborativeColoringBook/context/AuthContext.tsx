@@ -11,6 +11,7 @@ type AuthContextType = {
   signUp: (email: string, password: string, username: string, displayName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +24,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const updateUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadUserProfile(session.user.id);
+    }
+  };
 
   useEffect(() => {
     // Get initial session
@@ -74,8 +82,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         bio: 'Welcome!',
         roles: ['supporter'],
         joinedDate: new Date(),
-        followers: [],
-        following: [],
         uploadedArtworks: [],
         colorizedVersions: [],
         likedArtworks: [],
@@ -159,6 +165,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       signUp,
       signIn,
       signOut,
+      updateUser,
     }}>
       {children}
     </AuthContext.Provider>
