@@ -97,8 +97,6 @@ export const directSupabaseService = {
         bio: userData.bio || 'No bio yet.',
         roles: userData.roles || ['supporter'],
         joinedDate: new Date(userData.created_at),
-        followers: userData.followers || [],
-        following: userData.following || [],
         uploadedArtworks: userData.uploaded_artworks || [],
         colorizedVersions: userData.colorized_versions || [],
         likedArtworks: userData.liked_artworks || [],
@@ -167,8 +165,6 @@ export const directSupabaseService = {
       bio: 'Welcome to the coloring community!',
       roles: ['supporter'],
       joinedDate: new Date(),
-      followers: [],
-      following: [],
       uploadedArtworks: [],
       colorizedVersions: [],
       likedArtworks: [],
@@ -392,6 +388,161 @@ export const directSupabaseService = {
     } catch (error) {
       console.error('❌ Error checking like status:', error);
       return false;
+    }
+  },
+  async followUser(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      console.log(`🔗 User ${followerId} following ${followingId}`);
+      
+      // First, add to follows table
+      const followData = await makeRequest('follows', {
+        method: 'POST',
+        body: JSON.stringify({
+          follower_id: followerId,
+          following_id: followingId,
+        }),
+      }, true);
+
+      console.log('✅ Follow added to follows table');
+
+      // Then update the user arrays (optional - for performance)
+      // This part might be handled by database triggers, but we'll do it manually for now
+      await this.updateUserFollowArrays(followerId, followingId, 'follow');
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error following user:', error);
+      throw error;
+    }
+  },
+
+  async unfollowUser(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      console.log(`🔗 User ${followerId} unfollowing ${followingId}`);
+      
+      // First, remove from follows table
+      await makeRequest(`follows?follower_id=eq.${followerId}&following_id=eq.${followingId}`, {
+        method: 'DELETE',
+      }, true);
+
+      console.log('✅ Unfollow removed from follows table');
+
+      // Then update the user arrays
+      await this.updateUserFollowArrays(followerId, followingId, 'unfollow');
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error unfollowing user:', error);
+      throw error;
+    }
+  },
+
+  async updateUserFollowArrays(followerId: string, followingId: string, action: 'follow' | 'unfollow') {
+    try {
+      // For now, we'll rely on the follows table for counts
+      // In a production app, you might want to update the arrays here
+      // or create database triggers to keep them in sync
+      console.log(`🔄 Follow arrays update would happen here for ${action}`);
+    } catch (error) {
+      console.error('Error updating follow arrays:', error);
+      // Don't throw - this is secondary to the main follow operation
+    }
+  },
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      const url = `${supabaseUrl}/rest/v1/follows?select=id&follower_id=eq.${followerId}&following_id=eq.${followingId}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to check follow status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Error checking follow status:', error);
+      return false;
+    }
+  },
+
+  async getFollowerCount(userId: string): Promise<number> {
+    try {
+      // Use the follows table instead of the array for accurate counts
+      const url = `${supabaseUrl}/rest/v1/follows?select=id&following_id=eq.${userId}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get follower count: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.length;
+    } catch (error) {
+      console.error('Error getting follower count:', error);
+      return 0;
+    }
+  },
+
+  async getFollowingCount(userId: string): Promise<number> {
+    try {
+      const url = `${supabaseUrl}/rest/v1/follows?select=id&follower_id=eq.${userId}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get following count: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.length;
+    } catch (error) {
+      console.error('Error getting following count:', error);
+      return 0;
+    }
+  },
+
+  async getUserFollowers(userId: string): Promise<string[]> {
+    try {
+      const url = `${supabaseUrl}/rest/v1/follows?select=follower_id&following_id=eq.${userId}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get followers: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.map((item: any) => item.follower_id);
+    } catch (error) {
+      console.error('Error getting followers:', error);
+      return [];
     }
   },
 };

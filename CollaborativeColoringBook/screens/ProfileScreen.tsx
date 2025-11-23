@@ -28,7 +28,11 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
+
   // Get the user ID from navigation params
   const { userId } = route.params;
   
@@ -58,6 +62,15 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       const userArtworks = artworks.filter(artwork => artwork.artistId === userId);
       console.log('✅ User artworks filtered, count:', userArtworks.length);
       setUserLineArt(userArtworks);
+      if (currentUser && currentUser.id !== userId) {
+        const followingStatus = await directSupabaseService.isFollowing(currentUser.id, userId);
+        setIsFollowing(followingStatus);
+      }
+
+      const followers = await directSupabaseService.getFollowerCount(userId);
+      const following = await directSupabaseService.getFollowingCount(userId);
+      setFollowerCount(followers);
+      setFollowingCount(following);
       
     } catch (error) {
       console.error('💥 Error loading user profile:', error);
@@ -66,7 +79,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, currentUser]);
 
   // Load user profile data with proper cleanup
   useEffect(() => {
@@ -91,6 +104,42 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       clearTimeout(loadTimeout);
     };
   }, [userId, loadUserProfile, navigation]); // Added proper dependencies
+
+  // Handle Follow Actions
+  const handleFollowToggle = async () => {
+    if (!currentUser) {
+      navigation.navigate('Auth');
+      return;
+    }
+  
+    if (!profileUser) return;
+  
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        // Unfollow
+        await directSupabaseService.unfollowUser(currentUser.id, profileUser.id);
+        setIsFollowing(false);
+        setFollowerCount(prev => Math.max(0, prev - 1)); // Optimistic update
+        console.log('✅ Unfollowed user');
+      } else {
+        // Follow
+        await directSupabaseService.followUser(currentUser.id, profileUser.id);
+        setIsFollowing(true);
+        setFollowerCount(prev => prev + 1); // Optimistic update
+        console.log('✅ Followed user');
+      }
+    } catch (error) {
+      console.error('❌ Error toggling follow:', error);
+      // Revert optimistic update on error
+      const actualFollowers = await directSupabaseService.getFollowerCount(profileUser.id);
+      setFollowerCount(actualFollowers);
+      const actualFollowingStatus = await directSupabaseService.isFollowing(currentUser.id, profileUser.id);
+      setIsFollowing(actualFollowingStatus);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
   // Handle logout
   const handleLogoutPress = () => {
@@ -280,19 +329,26 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         </View>
       );
     } else {
-      // Safe check for current user ID
-      const isFollowing = currentUser?.id ? user.followers.includes(currentUser.id) : false;
       return (
-        <TouchableOpacity style={[
-          styles.followButton,
-          isFollowing && styles.followingButton
-        ]}>
-          <Text style={[
-            styles.followButtonText,
-            isFollowing && styles.followingButtonText
-          ]}>
-            {isFollowing ? 'Following' : 'Follow'}
-          </Text>
+        <TouchableOpacity 
+          style={[
+            styles.followButton,
+            isFollowing && styles.followingButton,
+            followLoading && styles.followButtonDisabled
+          ]}
+          onPress={handleFollowToggle}
+          disabled={followLoading}
+        >
+          {followLoading ? (
+            <ActivityIndicator size="small" color={isFollowing ? "#333" : "white"} />
+          ) : (
+            <Text style={[
+              styles.followButtonText,
+              isFollowing && styles.followingButtonText
+            ]}>
+              {isFollowing ? 'Following' : 'Follow'}
+            </Text>
+          )}
         </TouchableOpacity>
       );
     }
@@ -394,11 +450,11 @@ const ProfileScreen = ({ route, navigation }: Props) => {
           <Text style={styles.statLabel}>Colorizations</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statNumber}>{user.followers?.length || 0}</Text>
+          <Text style={styles.statNumber}>{followerCount}</Text>
           <Text style={styles.statLabel}>Followers</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statNumber}>{user.following?.length || 0}</Text>
+          <Text style={styles.statNumber}>{followingCount}</Text>
           <Text style={styles.statLabel}>Following</Text>
         </View>
       </View>
@@ -769,6 +825,9 @@ const styles = StyleSheet.create({
   },
   followingButton: {
     backgroundColor: '#f0f0f0',
+  },
+  followButtonDisabled: {
+    opacity: 0.6,
   },
   followButtonText: {
     color: 'white',

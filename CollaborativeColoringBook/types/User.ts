@@ -9,10 +9,6 @@ export interface User {
     roles: UserRole[];
     joinedDate: Date;
     
-    // Stats
-    followers: string[]; // user IDs
-    following: string[]; // user IDs
-    
     // Content
     uploadedArtworks: string[]; // artwork IDs
     colorizedVersions: string[]; // colorized version IDs

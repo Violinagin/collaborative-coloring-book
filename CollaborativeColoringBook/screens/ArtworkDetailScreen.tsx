@@ -284,7 +284,6 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   );
 };
 
-// Your existing styles remain the same...
 const styles = StyleSheet.create({
   container: {
     flex: 1,

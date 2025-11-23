@@ -40,6 +40,7 @@ const GalleryScreen = ({ navigation }: Props) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [realLikeData, setRealLikeData] = useState<{[artworkId: string]: {count: number, isLiked: boolean}}>({});
+  const [realCommentData, setRealCommentData] = useState<{[artworkId: string]: number}>({});
 
   // Load artworks from Supabase - no user dependency
   const loadArtworks = async () => {
@@ -54,31 +55,38 @@ const GalleryScreen = ({ navigation }: Props) => {
       
       // Load like data for ALL artworks first, then update state once
       const likeData: {[artworkId: string]: {count: number, isLiked: boolean}} = {};
+      const commentData: {[artworkId: string]: number} = {};
       
       // Use Promise.all to load all like data in parallel
-      const likePromises = supabaseArtworks.map(async (artwork) => {
-        const count = await directSupabaseService.getLikeCount(artwork.id);
-        let isLiked = false;
+      const dataPromises = supabaseArtworks.map(async (artwork) => {
+        const [likeCount, comments, isLiked] = await Promise.all([
+          directSupabaseService.getLikeCount(artwork.id),
+          directSupabaseService.getComments(artwork.id),
+          user ? directSupabaseService.isLiked(artwork.id, user.id) : false
+        ]);
         
-        if (user) {
-          isLiked = await directSupabaseService.isLiked(artwork.id, user.id);
-        }
-        
-        return { artworkId: artwork.id, count, isLiked };
-      });
-      
-      const likeResults = await Promise.all(likePromises);
-      
-      // Build the likeData object from results
-      likeResults.forEach(result => {
-        likeData[result.artworkId] = {
-          count: result.count,
-          isLiked: result.isLiked
+        return { 
+          artworkId: artwork.id, 
+          likeCount, 
+          commentCount: comments.length,
+          isLiked 
         };
       });
       
-      console.log('✅ Like data loaded for all artworks');
+      const results = await Promise.all(dataPromises);
+      
+      // Build the data objects from results
+      results.forEach(result => {
+        likeData[result.artworkId] = {
+          count: result.likeCount,
+          isLiked: result.isLiked
+        };
+        commentData[result.artworkId] = result.commentCount;
+      });
+      
+      console.log('✅ Like and comment data loaded for all artworks');
       setRealLikeData(likeData);
+      setRealCommentData(commentData);
       
     } catch (error) {
       console.error('Error loading artworks:', error);
@@ -87,25 +95,6 @@ const GalleryScreen = ({ navigation }: Props) => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-// Temporary debug function
-  const debugLikeState = async (artworkId: string) => {
-    if (!user) return;
-    
-    console.log('🐛 DEBUG LIKE STATE:');
-    console.log('Artwork ID:', artworkId);
-    console.log('User ID:', user.id);
-    
-    const dbIsLiked = await directSupabaseService.isLiked(artworkId, user.id);
-    const dbLikeCount = await directSupabaseService.getLikeCount(artworkId);
-    const uiState = realLikeData[artworkId];
-    
-    console.log('Database - isLiked:', dbIsLiked);
-    console.log('Database - likeCount:', dbLikeCount);
-    console.log('UI State:', uiState);
-    console.log('Context - isLiked:', isLiked(artworkId));
-    console.log('Context - likeCount:', getLikeCount(artworkId));
   };
 
   // Load artworks on component mount
@@ -173,6 +162,7 @@ const GalleryScreen = ({ navigation }: Props) => {
       count: 0, 
       isLiked: false 
     };
+    const commentCount = realCommentData[item.id] || 0;
     
     return (
       <TouchableOpacity 
@@ -211,7 +201,7 @@ const GalleryScreen = ({ navigation }: Props) => {
               size="small"
             />
             <CommentButton 
-              commentCount={getCommentCount(item.id)}
+              commentCount={commentCount}
               onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
               size="small"
             />
@@ -222,9 +212,13 @@ const GalleryScreen = ({ navigation }: Props) => {
               {item.colorizedVersions.length} colorizations
             </Text>
             <Text style={styles.stat}>
-              {likeInfo.count} likes  {/* Use realLikeData */}
+            {likeInfo.count} likes 
+            </Text>
+            <Text style={styles.stat}>
+            {commentCount} comments
             </Text>
           </View>
+
         </View>
       </TouchableOpacity>
     );
