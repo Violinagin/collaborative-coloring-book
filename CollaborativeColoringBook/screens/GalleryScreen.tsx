@@ -20,23 +20,29 @@ import { useLikes } from '../context/LikesContext';
 import { useComments } from '../context/CommentsContext';
 import { useApp } from '../context/AppContext';
 import { directSupabaseService } from '../services/directSupabaseService';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
-
 const GalleryScreen = ({ navigation }: Props) => {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   const { toggleLike, isLiked, getLikeCount } = useLikes();
   const { getCommentCount } = useComments();
+  const { user } = useAuth(); // Only for like functionality
   
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load artworks from Supabase
+  // Load artworks from Supabase - no user dependency
   const loadArtworks = async () => {
     try {
       setLoading(true);
-      const supabaseArtworks = await directSupabaseService.getArtworks();
+      const timeoutPromise = new Promise<Artwork[]>((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout loading artworks')), 10000)
+    );
+    
+    const artworksPromise = directSupabaseService.getArtworks();
+      const supabaseArtworks = await Promise.race([artworksPromise, timeoutPromise]);
       setArtworks(supabaseArtworks);
     } catch (error) {
       console.error('Error loading artworks:', error);
@@ -59,20 +65,20 @@ const GalleryScreen = ({ navigation }: Props) => {
     loadArtworks();
   };
 
-  // Handle like with Supabase
+  // Handle like - redirect to auth if not logged in
   const handleLike = async (artworkId: string) => {
+    if (!user) {
+      // Redirect to auth if not logged in
+      navigation.navigate('Auth');
+      return;
+    }
+
     try {
-      const currentUserId = state.currentUser.id;
-      console.log('🎯 Toggling like for artwork:', artworkId, 'user:', currentUserId);
-      
-      const nowLiked = await directSupabaseService.toggleLike(artworkId, currentUserId);
+      const nowLiked = await directSupabaseService.toggleLike(artworkId, user.id);
       console.log('✅ Like toggled successfully, now liked:', nowLiked);
       
       // Update local state for immediate feedback
-      dispatch({
-        type: 'TOGGLE_LIKE',
-        payload: { artworkId, userId: currentUserId }
-      });
+      toggleLike(artworkId);
       
     } catch (error) {
       console.error('❌ Error toggling like:', error);
@@ -92,7 +98,15 @@ const GalleryScreen = ({ navigation }: Props) => {
       />
       <View style={styles.artworkInfo}>
         <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.artist}>by {item.artist}</Text>
+        <TouchableOpacity 
+          onPress={() => {
+            if (item.artistId) {
+              navigation.navigate('Profile', { userId: item.artistId });
+            }
+          }}
+        >
+          <Text style={styles.artist}>by {item.artist}</Text>
+        </TouchableOpacity>
         
         {item.description && (
           <Text style={styles.description} numberOfLines={2}>
@@ -119,7 +133,7 @@ const GalleryScreen = ({ navigation }: Props) => {
             {item.colorizedVersions.length} colorizations
           </Text>
           <Text style={styles.stat}>
-            {item.likes.length} likes
+            {getLikeCount(item.id)} likes
           </Text>
         </View>
       </View>
@@ -225,8 +239,9 @@ const styles = StyleSheet.create({
   },
   artist: {
     fontSize: 14,
-    color: '#666',
+    color: '#007AFF',
     marginTop: 4,
+    textDecorationLine: 'underline',
   },
   description: {
     fontSize: 12,

@@ -80,7 +80,13 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim() || !user || !artwork) return;
+    if (!user) {
+      // Redirect to auth if not logged in
+      navigation.navigate('Auth');
+      return;
+    }
+  
+    if (!newComment.trim() || !artwork) return;
   
     setSubmittingComment(true);
     try {
@@ -102,7 +108,13 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   };
 
   const handleLike = async () => {
-    if (!user || !artwork) return;
+    if (!user) {
+      // Redirect to auth if not logged in
+      navigation.navigate('Auth');
+      return;
+    }
+  
+    if (!artwork) return;
   
     try {
       const nowLiked = await directSupabaseService.toggleLike(artwork.id, user.id);

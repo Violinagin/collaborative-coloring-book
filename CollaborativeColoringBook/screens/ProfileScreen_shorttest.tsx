@@ -268,7 +268,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       {/* Profile Header */}
       <View style={styles.header}>
         <Image 
-          source={{ uri: user.avatarUrl || 'https://via.placeholder.com/80x80.png?text=👤' }} 
+          source={{ uri: user.avatarUrl || '👤' }} 
           style={styles.avatar} 
         />
         <View style={styles.headerInfo}>

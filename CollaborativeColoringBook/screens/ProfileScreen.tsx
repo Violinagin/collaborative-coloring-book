@@ -1,5 +1,5 @@
-// screens/ProfileScreen.tsx
-import React, { useState, useEffect } from 'react';
+// screens/ProfileScreen.tsx - FIXED VERSION
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,74 +8,40 @@ import {
   ScrollView, 
   TouchableOpacity,
   FlatList,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { User, UserRole, Artwork } from '../types/User';
 import { useAuth } from '../context/AuthContext';
 import { directSupabaseService } from '../services/directSupabaseService';
+import { supabase } from '../lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 const ProfileScreen = ({ route, navigation }: Props) => {
   const [activeTab, setActiveTab] = useState<'lineArt' | 'colorWork' | 'activity'>('lineArt');
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, signOut } = useAuth();
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userLineArt, setUserLineArt] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   
   // Get the user ID from navigation params
   const { userId } = route.params;
   
   // Determine if this is the current user's own profile
   const isOwnProfile = userId === currentUser?.id;
-  
-  // Safety check - redirect if no valid user ID
-  useEffect(() => {
+
+  // Use useCallback to memoize the load function
+  const loadUserProfile = useCallback(async () => {
     if (!userId) {
-      console.log('No user ID provided, redirecting to auth');
-      navigation.replace('Auth');
+      console.log('Skipping profile load - no userId');
+      setLoading(false);
       return;
     }
-  
-    // Add a safety timeout to prevent infinite loading
-    const safetyTimeout = setTimeout(() => {
-      if (loading) {
-        console.log('Safety timeout triggered - profile taking too long');
-        setLoading(false);
-        // Create a basic user object to prevent crashes
-        if (!profileUser) {
-          const basicUser: User = {
-            id: userId,
-            username: `user_${userId.slice(0, 8)}`,
-            displayName: 'User',
-            avatarUrl: 'https://via.placeholder.com/80x80.png?text=👤',
-            bio: 'User profile',
-            roles: ['supporter'],
-            joinedDate: new Date(),
-            followers: [],
-            following: [],
-            uploadedArtworks: [],
-            colorizedVersions: [],
-            likedArtworks: [],
-            recentActivity: [],
-          };
-          setProfileUser(basicUser);
-        }
-      }
-    }, 8000); // 8 second safety timeout
-  
-    loadUserProfile();
-  
-    return () => {
-      clearTimeout(safetyTimeout);
-    };
-  }, [userId]);
-
-  const loadUserProfile = async () => {
-    if (!userId) return;
     
     try {
       setLoading(true);
@@ -95,14 +61,81 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       
     } catch (error) {
       console.error('💥 Error loading user profile:', error);
+      // Only set failed if we're still supposed to be loading
       setLoadFailed(true);
     } finally {
       setLoading(false);
     }
+  }, [userId]);
+
+  // Load user profile data with proper cleanup
+  useEffect(() => {
+    if (!userId) {
+      console.log('No user ID provided, redirecting to auth');
+      navigation.replace('Auth');
+      return;
+    }
+
+    let isMounted = true;
+    const loadTimeout = setTimeout(() => {
+      if (isMounted && loading) {
+        console.log('Profile load timeout - taking too long');
+        setLoading(false);
+      }
+    }, 15000); // 10 second timeout
+
+    loadUserProfile();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(loadTimeout);
+    };
+  }, [userId, loadUserProfile, navigation]); // Added proper dependencies
+
+  // Handle logout
+  const handleLogoutPress = () => {
+    console.log('🎯 Logout button pressed');
+    setShowLogoutModal(true);
+  };
+  
+  const handleLogoutConfirm = async () => {
+    console.log('🚪 User confirmed logout...');
+    setShowLogoutModal(false);
+    try {
+      await signOut();
+      navigation.replace('Gallery');
+    } catch (error: any) {
+      console.error('❌ Logout error:', error);
+      Alert.alert('Logout Failed', error?.message || 'Please try again.');
+    }
+  };
+  
+  const handleLogoutCancel = () => {
+    console.log('❌ Logout cancelled by user');
+    setShowLogoutModal(false);
+  };
+
+   // Debug function to check auth state
+   const debugAuthState = async () => {
+    try {
+      console.log('🔍 DEBUG: Checking auth state...');
+      console.log('Current user from context:', currentUser);
+      
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      console.log('Session data:', sessionData);
+      console.log('Session error:', sessionError);
+      
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      console.log('User data:', userData);
+      console.log('User error:', userError);
+      
+    } catch (error) {
+      console.error('❌ Debug error:', error);
+    }
   };
 
   // Show loading state
-  if (loading && !loadFailed) {
+  if (loading && !loadFailed && !profileUser) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -120,8 +153,8 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     );
   }
 
-  // Show error state if load failed
-  if (loadFailed) {
+  // Show error state if load failed AND we don't have any user data
+  if (loadFailed && !profileUser) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorTitle}>Failed to Load Profile</Text>
@@ -140,6 +173,14 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         >
           <Text style={styles.backButtonText}>← Back to Gallery</Text>
         </TouchableOpacity>
+        {isOwnProfile && (
+          <TouchableOpacity 
+            style={styles.logoutButton}
+            onPress={handleLogoutPress}
+          >
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -168,7 +209,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     );
   }
 
-  // Use profileUser for display
+  // Use profileUser for display - if we have user data, show it even if loading failed later
   const user = profileUser;
 
   // If we still don't have a user after loading, show error
@@ -185,10 +226,26 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         >
           <Text style={styles.backButtonText}>← Back to Gallery</Text>
         </TouchableOpacity>
+        {isOwnProfile && (
+          <TouchableOpacity 
+            style={styles.logoutButton}
+            onPress={handleLogoutPress}
+          >
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
-
+  const testAuthContextLogout = async () => {
+    console.log('🔍 Testing AuthContext signOut...');
+    try {
+      await signOut();
+      console.log('✅ AuthContext signOut completed without error');
+    } catch (error) {
+      console.error('❌ AuthContext signOut error:', error);
+    }
+  };
   const renderRoleBadges = (roles: UserRole[]) => {
     const roleLabels = {
       line_artist: '🎨 Line Artist',
@@ -210,9 +267,17 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const renderHeaderActions = () => {
     if (isOwnProfile) {
       return (
-        <TouchableOpacity style={styles.editButton}>
-          <Text style={styles.editButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
+        <View style={styles.ownProfileActions}>
+          <TouchableOpacity style={styles.editButton}>
+            <Text style={styles.editButtonText}>Edit Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.logoutButtonSmall}
+            onPress={handleLogoutPress}
+          >
+            <Text style={styles.logoutButtonTextSmall}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
       );
     } else {
       // Safe check for current user ID
@@ -296,11 +361,12 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   );
 
   return (
+    <View style={styles.container}>
     <ScrollView style={styles.container}>
       {/* Profile Header */}
       <View style={styles.header}>
         <Image 
-          source={{ uri: user.avatarUrl || 'https://via.placeholder.com/80x80.png?text=👤' }} 
+          source={{ uri: user.avatarUrl || '👤' }} 
           style={styles.avatar} 
         />
         <View style={styles.headerInfo}>
@@ -371,14 +437,143 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         {activeTab === 'colorWork' && renderColorWorkTab()}
         {activeTab === 'activity' && renderActivityTab()}
       </View>
+
+      {/* Additional Logout Button for Own Profile (at bottom) */}
+      {isOwnProfile && (
+        <View style={styles.bottomLogoutSection}>
+          <TouchableOpacity 
+            style={styles.bottomLogoutButton}
+            onPress={handleLogoutPress}
+          >
+            <Text style={styles.bottomLogoutButtonText}>🚪 Log Out</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
+    {showLogoutModal && (
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContent}>
+      <Text style={styles.modalTitle}>Log Out</Text>
+      <Text style={styles.modalText}>
+        Are you sure you want to log out?
+      </Text>
+      <View style={styles.modalButtons}>
+        <TouchableOpacity 
+          style={[styles.modalButton, styles.modalCancelButton]}
+          onPress={handleLogoutCancel}
+        >
+          <Text style={styles.modalCancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.modalButton, styles.modalConfirmButton]}
+          onPress={handleLogoutConfirm}
+        >
+          <Text style={styles.modalConfirmButtonText}>Log Out</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+)}
+    </View>
   );
 };
 
+
 const styles = StyleSheet.create({
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 24,
+    borderRadius: 12,
+    margin: 20,
+    minWidth: 280,
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 24,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelButton: {  // Changed from cancelButton
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  modalConfirmButton: {
+    backgroundColor: '#ff4444',
+  },
+  modalCancelButtonText: {  // Changed from cancelButtonText
+    color: '#333',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  modalConfirmButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  debugButton: {
+    backgroundColor: '#666',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  debugButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -427,6 +622,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    backgroundColor: '#ff4444',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  logoutButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
@@ -528,15 +735,29 @@ const styles = StyleSheet.create({
     marginRight: 6,
     marginBottom: 4,
   },
+  ownProfileActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
   editButton: {
     backgroundColor: '#f0f0f0',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    marginLeft: 12,
   },
   editButtonText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  logoutButtonSmall: {
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  logoutButtonTextSmall: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: '600',
   },
   followButton: {
@@ -637,6 +858,24 @@ const styles = StyleSheet.create({
   },
   uploadPromptText: {
     color: 'white',
+    fontWeight: '600',
+  },
+  bottomLogoutSection: {
+    padding: 20,
+    backgroundColor: 'white',
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  bottomLogoutButton: {
+    backgroundColor: '#ff4444',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  bottomLogoutButtonText: {
+    color: 'white',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

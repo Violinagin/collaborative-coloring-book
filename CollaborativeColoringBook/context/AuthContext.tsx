@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         id: userId,
         username: `user_${userId.slice(0, 8)}`,
         displayName: 'New User',
-        avatarUrl: 'https://via.placeholder.com/80x80.png?text=👤',
+        avatarUrl: '👤',
         bio: 'Welcome!',
         roles: ['supporter'],
         joinedDate: new Date(),
@@ -136,8 +136,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    console.log('🚪 Starting sign out process...');
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ Sign out error:', error);
+        throw error;
+      }
+      console.log('✅ Sign out successful');
+      // The auth state change listener will handle setting user to null
+    } catch (error) {
+      console.error('❌ Sign out failed:', error);
+      throw error;
+    }
   };
 
   return (

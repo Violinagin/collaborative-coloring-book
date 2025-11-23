@@ -8,43 +8,51 @@ const HeaderRight = () => {
   const navigation = useNavigation() as any;
   const { user } = useAuth();
 
-  console.log('🔍 HeaderRight - User object:', user);
-  console.log('🔍 HeaderRight - User ID:', user?.id);
-
   const handleUploadPress = () => {
-    console.log('🎯 Profile button clicked');
-    console.log('🎯 Current user ID:', user?.id);
     if (!user) {
-      // Go to auth screen when not logged in
-      console.log('🚫 No user, navigating to Auth');
+      // Redirect to auth if not logged in
       navigation.navigate('Auth');
       return;
     }
-    console.log('✅ Navigating to Profile with ID:', user.id);
     navigation.navigate('Upload');
   };
 
   const handleProfilePress = () => {
     if (!user) {
-      // Go directly to auth screen when not logged in
+      // Redirect to auth if not logged in
       navigation.navigate('Auth');
       return;
     }
-    console.log('Navigating to profile with user ID:', user.id);
     navigation.navigate('Profile', { userId: user.id });
+  };
+
+    const handleAuthPress = () => {
+    navigation.navigate('Auth');
   };
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <TouchableOpacity 
-        onPress={handleUploadPress}
-        style={{ marginRight: 16 }}
-      >
-        <Text style={{ fontSize: 24 }}>📤</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={handleProfilePress}>
-        <Text style={{ fontSize: 24 }}>👤</Text>
-      </TouchableOpacity>
+      {user ? (
+        // User is logged in - show upload and profile
+        <>
+          <TouchableOpacity 
+            onPress={handleUploadPress}
+            style={{ marginRight: 16 }}
+          >
+            <Text style={{ fontSize: 24 }}>📤</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleProfilePress}>
+            <Text style={{ fontSize: 24 }}>👤</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        // User is not logged in - show login button
+        <TouchableOpacity onPress={handleAuthPress}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#007AFF' }}>
+            Login
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

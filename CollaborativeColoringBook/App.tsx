@@ -33,26 +33,30 @@ function Navigation() {
   return (
     <NavigationContainer>
       <Stack.Navigator>
+        {/* Gallery is always accessible to everyone */}
+        <Stack.Screen 
+          name="Gallery" 
+          component={GalleryScreen}
+          options={({ navigation }) => ({ 
+            title: 'Collaborative Coloring Book',
+            headerRight: () => <HeaderRight />
+          })}
+        />
+        
+        {/* Artwork details are public */}
+        <Stack.Screen 
+          name="ArtworkDetail" 
+          component={ArtworkDetailScreen}
+          options={{ title: 'Artwork Details' }}
+        />
+
         {user ? (
-          // User is signed in - show main app
+          // User is signed in - show protected screens
           <>
-            <Stack.Screen 
-              name="Gallery" 
-              component={GalleryScreen}
-              options={({ navigation }) => ({ 
-                title: 'Collaborative Coloring Book',
-                headerRight: () => <HeaderRight />
-              })}
-            />
             <Stack.Screen 
               name="Profile" 
               component={ProfileScreen}
               options={{ title: 'Profile' }}
-            />
-            <Stack.Screen 
-              name="ArtworkDetail" 
-              component={ArtworkDetailScreen}
-              options={{ title: 'Artwork Details' }}
             />
             <Stack.Screen 
               name="Upload" 
@@ -66,7 +70,7 @@ function Navigation() {
             />
           </>
         ) : (
-          // User is not signed in - only show Auth screen
+          // User is not signed in - show auth screen
           <Stack.Screen 
             name="Auth" 
             component={AuthScreen}
