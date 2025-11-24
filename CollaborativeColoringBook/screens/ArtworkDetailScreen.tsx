@@ -262,22 +262,24 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
 
           {/* Colorized Versions */}
           <View style={styles.colorizationsSection}>
-            <Text style={styles.sectionTitle}>Colorized Versions</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {currentArtwork.colorizedVersions.map(version => (
-                <TouchableOpacity key={version.id} style={styles.colorizedThumbnail}>
-                  <Image 
-                    source={{ uri: version.coloredImageUrl }} 
-                    style={styles.thumbnailImage}
-                  />
-                  <Text style={styles.colorist}>by {version.colorist}</Text>
-                </TouchableOpacity>
-              ))}
-              {currentArtwork.colorizedVersions.length === 0 && (
-                <Text style={styles.noColorizations}>No colorizations yet. Be the first!</Text>
-              )}
-            </ScrollView>
-          </View>
+           <Text style={styles.sectionTitle}>
+             Colorized Versions ({currentArtwork.colorizedVersions.length})
+           </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {currentArtwork.colorizedVersions.map(version => (
+          <TouchableOpacity key={version.id} style={styles.colorizedThumbnail}>
+            <Image 
+              source={{ uri: version.coloredImageUrl }} 
+              style={styles.thumbnailImage}
+            />
+            <Text style={styles.colorist}>by {version.colorist}</Text>
+          </TouchableOpacity>
+    ))}
+    {currentArtwork.colorizedVersions.length === 0 && (
+      <Text style={styles.noColorizations}>No colorizations yet. Be the first!</Text>
+    )}
+  </ScrollView>
+</View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

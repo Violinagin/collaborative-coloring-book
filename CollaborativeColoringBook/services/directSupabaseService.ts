@@ -176,8 +176,7 @@ export const directSupabaseService = {
       try {
         console.log('🖼️ Loading artworks from Supabase...');
         
-        // Simple public fetch without complex joins that might fail
-        const url = `${supabaseUrl}/rest/v1/artworks?select=*`;
+        const url = `${supabaseUrl}/rest/v1/artworks?select=*,users!artworks_artist_id_fkey(display_name)`;
         
         const response = await fetch(url, {
           headers: {
@@ -196,21 +195,35 @@ export const directSupabaseService = {
         console.log(`✅ Loaded ${data.length} artworks`);
         
         // Transform the data - handle missing user data gracefully
-        return data.map((item: any) => ({
-          id: item.id,
-          title: item.title || 'Untitled',
-          artist: 'Artist', // We'll fix this later with proper user data
-          artistId: item.artist_id || '',
-          lineArtUrl: item.line_art_url || '',
-          colorizedVersions: [],
-          likes: [],
-          comments: [],
-          createdAt: new Date(item.created_at),
-          description: item.description || undefined,
-        }));
+        const artworksWithColorizations = await Promise.all(
+          data.map(async (item: any) => {
+            const colorizations = await this.getArtworkColorizations(item.id);
+            
+            return {
+              id: item.id,
+              title: item.title,
+              artist: item.users?.display_name || 'Unknown Artist',
+              artistId: item.artist_id,
+              lineArtUrl: item.line_art_url,
+              colorizedVersions: colorizations.map((color: any) => ({
+                id: color.id,
+                colorist: color.users?.display_name || 'Unknown Colorist',
+                coloristId: color.colorist_id,
+                coloredImageUrl: color.colored_image_url,
+                createdAt: new Date(color.created_at),
+              })),
+              likes: [],
+              comments: [],
+              createdAt: new Date(item.created_at),
+              description: item.description || undefined,
+            };
+          })
+        );
+        
+        return artworksWithColorizations;
       } catch (error) {
         console.error('❌ Error loading artworks:', error);
-        return []; // Always return empty array, never throw
+        return [];
       }
     },
 
@@ -265,6 +278,78 @@ export const directSupabaseService = {
       createdAt: new Date(newArtwork.created_at),
       description: newArtwork.description || undefined,
     };
+  },
+
+  async getUserColorizations(userId: string): Promise<Artwork[]> {
+    try {
+      console.log('🎨 Loading colorizations for user:', userId);
+      
+      // Get colorized versions by this user
+      const url = `${supabaseUrl}/rest/v1/colorized_versions?select=*,artworks(*,users!artworks_artist_id_fkey(display_name))&colorist_id=eq.${userId}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+  
+      if (!response.ok) {
+        throw new Error(`Failed to fetch colorizations: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      console.log(`✅ Loaded ${data.length} colorizations`);
+      
+      // Transform the data
+      return data.map((item: any) => {
+        console.log('🎨 Colorization data:', {
+          id: item.id,
+          coloredImageUrl: item.colored_image_url,
+          artworkTitle: item.artworks.title
+        });  
+        return {
+          id: item.id, // Use colorization ID
+          title: `${item.artworks.title} (Colored)`,
+          artist: item.artworks.users?.display_name || 'Unknown Artist',
+          artistId: item.artworks.artist_id,
+          lineArtUrl: item.colored_image_url, // This should be the SVG URL
+          colorizedVersions: [],
+          likes: [],
+          comments: [],
+          createdAt: new Date(item.created_at),
+          description: `Colored version of "${item.artworks.title}"`,
+        };
+      });
+    } catch (error) {
+      console.error('Error loading user colorizations:', error);
+      return [];
+    }
+  },
+  
+  async getArtworkColorizations(artworkId: string): Promise<any[]> {
+    try {
+      const url = `${supabaseUrl}/rest/v1/colorized_versions?select=*,users!colorized_versions_colorist_id_fkey(display_name)&artwork_id=eq.${artworkId}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+  
+      if (!response.ok) {
+        throw new Error(`Failed to fetch artwork colorizations: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error loading artwork colorizations:', error);
+      return [];
+    }
   },
 
   async getComments(artworkId: string): Promise<Comment[]> {

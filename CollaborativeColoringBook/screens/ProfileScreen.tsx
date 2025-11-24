@@ -17,6 +17,7 @@ import { User, UserRole, Artwork } from '../types/User';
 import { useAuth } from '../context/AuthContext';
 import { directSupabaseService } from '../services/directSupabaseService';
 import { supabase } from '../lib/supabase';
+import RemoteSVG from '../components/RemoteSVG';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -32,6 +33,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
+  const [userColorWork, setUserColorWork] = useState<Artwork[]>([]);
 
   // Get the user ID from navigation params
   const { userId } = route.params;
@@ -52,16 +54,21 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       setLoadFailed(false);
       console.log('🚀 Loading profile for user:', userId);
       
-      // Use direct service instead of supabaseService
+      // Load user data
       const userData = await directSupabaseService.getUser(userId);
       console.log('✅ User data loaded successfully:', userData);
       setProfileUser(userData);
       
+      // Load artworks
       const artworks = await directSupabaseService.getArtworks();
       console.log('✅ Artworks loaded, count:', artworks.length);
       const userArtworks = artworks.filter(artwork => artwork.artistId === userId);
       console.log('✅ User artworks filtered, count:', userArtworks.length);
       setUserLineArt(userArtworks);
+      // Load user's colorizations
+      const userColorizations = await directSupabaseService.getUserColorizations(userId);
+      setUserColorWork(userColorizations);
+
       if (currentUser && currentUser.id !== userId) {
         const followingStatus = await directSupabaseService.isFollowing(currentUser.id, userId);
         setIsFollowing(followingStatus);
@@ -162,25 +169,6 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const handleLogoutCancel = () => {
     console.log('❌ Logout cancelled by user');
     setShowLogoutModal(false);
-  };
-
-   // Debug function to check auth state
-   const debugAuthState = async () => {
-    try {
-      console.log('🔍 DEBUG: Checking auth state...');
-      console.log('Current user from context:', currentUser);
-      
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      console.log('Session data:', sessionData);
-      console.log('Session error:', sessionError);
-      
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      console.log('User data:', userData);
-      console.log('User error:', userError);
-      
-    } catch (error) {
-      console.error('❌ Debug error:', error);
-    }
   };
 
   // Show loading state
@@ -286,15 +274,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       </View>
     );
   }
-  const testAuthContextLogout = async () => {
-    console.log('🔍 Testing AuthContext signOut...');
-    try {
-      await signOut();
-      console.log('✅ AuthContext signOut completed without error');
-    } catch (error) {
-      console.error('❌ AuthContext signOut error:', error);
-    }
-  };
+
   const renderRoleBadges = (roles: UserRole[]) => {
     const roleLabels = {
       line_artist: '🖌️ Line Artist',
@@ -397,16 +377,96 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     );
   };
 
-  const renderColorWorkTab = () => (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyStateText}>
-        {isOwnProfile 
-          ? "Your color work will appear here" 
-          : "Color work gallery coming soon"
-        }
-      </Text>
+  const renderColorWorkTab = () => {
+    console.log('🎨 Color work data:', userColorWork);
+    console.log('🔍 DETAILED COLOR WORK ANALYSIS:');
+  console.log(`Total color works: ${userColorWork.length}`);
+  
+  userColorWork.forEach((item, index) => {
+    console.log(`--- Color Work Item ${index} ---`);
+    console.log('ID:', item.id);
+    console.log('Title:', item.title);
+    console.log('Full URL:', item.lineArtUrl);
+    
+    if (item.lineArtUrl) {
+      console.log('URL Analysis:');
+      console.log('  - Is SVG extension:', item.lineArtUrl.includes('.svg'));
+      console.log('  - Is Supabase URL:', item.lineArtUrl.includes('supabase.co'));
+      console.log('  - Is public URL:', item.lineArtUrl.includes('/public/'));
+      console.log('  - URL starts with:', item.lineArtUrl.substring(0, 80));
+    } else {
+      console.log('❌ NO URL FOUND');
+    }
+    console.log('----------------');
+  });
+  
+  if (userColorWork.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyStateText}>
+          {isOwnProfile 
+            ? "You haven't colored any artworks yet" 
+            : "No color work yet"
+          }
+        </Text>
+        {isOwnProfile && (
+          <TouchableOpacity 
+            style={styles.uploadPrompt}
+            onPress={() => navigation.navigate('Gallery')}
+          >
+            <Text style={styles.uploadPromptText}>Browse Artworks to Color</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={userColorWork}
+      numColumns={2}
+      renderItem={({ item }: { item: Artwork }) => {
+        console.log('🎨 Rendering color work item:', {
+          id: item.id,
+          title: item.title,
+          imageUrl: item.lineArtUrl,
+          urlType: typeof item.lineArtUrl
+        });
+        
+        return (
+          <TouchableOpacity 
+            style={styles.artworkItem}
+            onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+          >
+             <RemoteSVG 
+      uri={item.lineArtUrl}
+      width={150}
+      height={150}
+      style={styles.artworkImage}
+    />
+    
+    <View style={styles.colorWorkBadge}>
+      <Text style={styles.colorWorkBadgeText}>Colored by You</Text>
     </View>
+    
+    <Text style={styles.artworkTitle} numberOfLines={1}>
+      {item.title.replace(' (Colored)', '')}
+    </Text>
+            <Text style={styles.artworkTitle} numberOfLines={1}>{item.title}</Text>
+            <Text style={styles.originalArtist}>Original by {item.artist}</Text>
+            
+            {/* Debug info */}
+            <Text style={styles.debugText} numberOfLines={1}>
+              {item.lineArtUrl ? 'Has URL' : 'No URL'}
+            </Text>
+          </TouchableOpacity>
+        );
+      }}
+      keyExtractor={(item: Artwork) => item.id}
+      contentContainerStyle={styles.galleryGrid}
+    />
   );
+};
 
   const renderActivityTab = () => (
     <View style={styles.emptyState}>
@@ -927,6 +987,44 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  colorWorkLabel: {
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  debugText: {
+    fontSize: 8,
+    color: 'red',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  colorWorkBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  colorWorkBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  artworkTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  originalArtist: {
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 2,
   },
 });
 

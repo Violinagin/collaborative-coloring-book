@@ -157,7 +157,7 @@ const GalleryScreen = ({ navigation }: Props) => {
   };
 
   const renderArtworkItem: ListRenderItem<Artwork> = ({ item }) => {
-    // Use ONLY realLikeData, not context
+    
     const likeInfo = realLikeData[item.id] || { 
       count: 0, 
       isLiked: false 
@@ -195,8 +195,8 @@ const GalleryScreen = ({ navigation }: Props) => {
           
           <View style={styles.actionsRow}>
             <LikeButton 
-              isLiked={likeInfo.isLiked}  // Use realLikeData
-              likeCount={likeInfo.count}   // Use realLikeData
+              isLiked={likeInfo.isLiked}  
+              likeCount={likeInfo.count}   
               onPress={() => handleLike(item.id)}
               size="small"
             />
