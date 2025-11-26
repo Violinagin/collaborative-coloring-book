@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { mockArtworks, Artwork } from '../data/mockData';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 type LikesContextType = {
-  artworks: Artwork[];
   likedArtworks: Set<string>;
-  toggleLike: (artworkId: string) => void;
+  toggleLike: (artworkId: string) => Promise<void>;
   isLiked: (artworkId: string) => boolean;
-  getLikeCount: (artworkId: string) => number;
+  getLikeCount: (artworkId: string) => Promise<number>;
+  refreshLikes: () => Promise<void>;
 };
 
 const LikesContext = createContext<LikesContextType | undefined>(undefined);
@@ -16,65 +17,111 @@ type LikesProviderProps = {
 };
 
 export const LikesProvider = ({ children }: LikesProviderProps) => {
-  const [artworks, setArtworks] = useState<Artwork[]>(mockArtworks);
   const [likedArtworks, setLikedArtworks] = useState<Set<string>>(new Set());
+  const { user } = useAuth();
 
-  const toggleLike = (artworkId: string) => {
+  // Load user's likes when component mounts or user changes
+  const refreshLikes = async () => {
+    if (!user) {
+      setLikedArtworks(new Set());
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('likes')
+        .select('artwork_id')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      const likedIds = new Set(data?.map(like => like.artwork_id) || []);
+      setLikedArtworks(likedIds);
+    } catch (error) {
+      console.error('Error loading likes:', error);
+    }
+  };
+
+  const toggleLike = async (artworkId: string) => {
+    if (!user) {
+      console.warn('User must be logged in to like artworks');
+      return;
+    }
+
     const currentlyLiked = likedArtworks.has(artworkId);
-    
-    setArtworks(prevArtworks => 
-      prevArtworks.map(artwork => {
-        if (artwork.id === artworkId) {
-          if (currentlyLiked) {
-            // Remove like
-            return {
-              ...artwork,
-              likes: artwork.likes.slice(0, -1)
-            };
-          } else {
-            // Add like
-            return {
-              ...artwork,
-              likes: [...artwork.likes, `user-${Date.now()}`]
-            };
-          }
-        }
-        return artwork;
-      })
-    );
 
-    setLikedArtworks(prev => {
-      const newLiked = new Set(prev);
+    try {
       if (currentlyLiked) {
-        newLiked.delete(artworkId);
+        // Remove like
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('artwork_id', artworkId);
+
+        if (error) throw error;
+
+        setLikedArtworks(prev => {
+          const newLiked = new Set(prev);
+          newLiked.delete(artworkId);
+          return newLiked;
+        });
       } else {
-        newLiked.add(artworkId);
+        // Add like
+        const { error } = await supabase
+          .from('likes')
+          .insert([
+            { user_id: user.id, artwork_id: artworkId }
+          ]);
+
+        if (error) throw error;
+
+        setLikedArtworks(prev => {
+          const newLiked = new Set(prev);
+          newLiked.add(artworkId);
+          return newLiked;
+        });
       }
-      return newLiked;
-    });
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
   const isLiked = (artworkId: string) => likedArtworks.has(artworkId);
 
-  const getLikeCount = (artworkId: string) => {
-    const artwork = artworks.find(a => a.id === artworkId);
-    return artwork ? artwork.likes.length : 0;
+  const getLikeCount = async (artworkId: string): Promise<number> => {
+    try {
+      const { count, error } = await supabase
+        .from('likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('artwork_id', artworkId);
+
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      console.error('Error getting like count:', error);
+      return 0;
+    }
   };
+
+  // Load likes when component mounts
+  React.useEffect(() => {
+    refreshLikes();
+  }, [user]);
 
   return (
     <LikesContext.Provider value={{
-      artworks,
       likedArtworks,
       toggleLike,
       isLiked,
       getLikeCount,
+      refreshLikes,
     }}>
       {children}
     </LikesContext.Provider>
   );
 };
 
-// Custom hook to use the likes context
 export const useLikes = () => {
   const context = useContext(LikesContext);
   if (context === undefined) {

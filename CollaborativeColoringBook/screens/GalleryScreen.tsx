@@ -1,4 +1,3 @@
-// screens/GalleryScreen.tsx - UPDATED VERSION
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -13,15 +12,12 @@ import {
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Artwork } from '../data/mockData';
 import { RootStackParamList } from '../types/navigation';
 import LikeButton from '../components/LikeButton';
 import CommentButton from '../components/CommentButton';
-import { useLikes } from '../context/LikesContext';
-import { useComments } from '../context/CommentsContext';
-import { useApp } from '../context/AppContext';
 import { directSupabaseService } from '../services/directSupabaseService';
 import { useAuth } from '../context/AuthContext';
+import { Artwork } from '../types/User';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 const GalleryScreen = ({ navigation }: Props) => {
@@ -31,11 +27,7 @@ const GalleryScreen = ({ navigation }: Props) => {
         loadArtworks();
       }
     }, [isFocused]);
-  const { state } = useApp();
-  const { toggleLike, isLiked, getLikeCount } = useLikes();
-  const { getCommentCount } = useComments();
-  const { user } = useAuth(); // Only for like functionality
-  
+  const { user } = useAuth();
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,10 +38,8 @@ const GalleryScreen = ({ navigation }: Props) => {
   const loadArtworks = async () => {
     try {
       setLoading(true);
-      console.log('🖼️ Loading artworks and like data...');
       
       const supabaseArtworks = await directSupabaseService.getArtworks();
-      console.log(`✅ Loaded ${supabaseArtworks.length} artworks`);
       
       setArtworks(supabaseArtworks);
       
@@ -84,13 +74,11 @@ const GalleryScreen = ({ navigation }: Props) => {
         commentData[result.artworkId] = result.commentCount;
       });
       
-      console.log('✅ Like and comment data loaded for all artworks');
       setRealLikeData(likeData);
       setRealCommentData(commentData);
       
     } catch (error) {
       console.error('Error loading artworks:', error);
-      setArtworks(state.artworks);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -116,11 +104,9 @@ const GalleryScreen = ({ navigation }: Props) => {
     }
   
     try {
-      console.log(`🎯 Toggling like for artwork ${artworkId} by user ${user.id}`);
       
       // Get current state from our local state (not context)
       const currentLikeState = realLikeData[artworkId]?.isLiked || false;
-      console.log(`📊 Current UI like state: ${currentLikeState}`);
       
       // Update UI optimistically first
       setRealLikeData(prev => ({
@@ -133,7 +119,6 @@ const GalleryScreen = ({ navigation }: Props) => {
   
       // Then make the actual database call
       const nowLiked = await directSupabaseService.toggleLike(artworkId, user.id);
-      console.log(`✅ Database like result: ${nowLiked}`);
       
       // Get fresh like count from database to ensure accuracy
       const newLikeCount = await directSupabaseService.getLikeCount(artworkId);
@@ -146,8 +131,6 @@ const GalleryScreen = ({ navigation }: Props) => {
           isLiked: nowLiked
         }
       }));
-  
-      console.log(`🔄 Final UI state - count: ${newLikeCount}, isLiked: ${nowLiked}`);
       
     } catch (error) {
       console.error('❌ Error toggling like:', error);
@@ -239,7 +222,7 @@ const GalleryScreen = ({ navigation }: Props) => {
         data={artworks}
         renderItem={renderArtworkItem}
         keyExtractor={(item: Artwork) => item.id}
-        numColumns={2}
+        numColumns={1}
         contentContainerStyle={styles.gallery}
         refreshControl={
           <RefreshControl
@@ -310,7 +293,7 @@ const styles = StyleSheet.create({
   },
   artworkImage: {
     width: '100%',
-    height: 150,
+    height: 350,
     borderRadius: 8,
     backgroundColor: '#f8f8f8',
   },

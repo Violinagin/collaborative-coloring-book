@@ -18,8 +18,6 @@ import { RootStackParamList } from '../types/navigation';
 import LikeButton from '../components/LikeButton';
 import { Artwork, Comment } from '../types/User';
 import CommentButton from '../components/CommentButton';
-import { useLikes } from '../context/LikesContext';
-import { useComments } from '../context/CommentsContext';
 import { useAuth } from '../context/AuthContext';
 import { directSupabaseService } from '../services/directSupabaseService';
 
@@ -28,8 +26,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const { user } = useAuth();
   const artworkFromParams: Artwork | undefined = route.params?.artwork;
-  const { toggleLike, isLiked, getLikeCount } = useLikes();
-  const { addComment, getComments, getCommentCount } = useComments();
   const [newComment, setNewComment] = useState('');
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,12 +92,9 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       setRealComments(prev => [...prev, comment]);
       setNewComment('');
       
-      // Also update the context
-      addComment(artwork.id, newComment.trim(), user.displayName);
-      
     } catch (error) {
       console.error('Error adding comment:', error);
-      Alert.alert('Error', 'Failed to add comment');
+      Alert.alert('Error', 'Failed to add comment'); //make modal
     } finally {
       setSubmittingComment(false);
     }
@@ -129,9 +122,6 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
         const actualLikeCount = await directSupabaseService.getLikeCount(artwork.id);
         setRealLikeCount(actualLikeCount);
       }
-      
-      // Update context for any components that might still use it
-      toggleLike(artwork.id);
       
     } catch (error) {
       console.error('Error toggling like:', error);

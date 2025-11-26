@@ -1,11 +1,11 @@
+// context/AppContext.tsx - CLEANED VERSION
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { Artwork, User } from '../types/User';
-import { mockArtworks, mockUsers } from '../data/mockData';
 
 type AppState = {
   artworks: Artwork[];
   users: User[];
-  currentUser: User;
+  currentUser: User | null; // Changed to null since we might not have a user
 };
 
 type AppAction = 
@@ -42,34 +42,36 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return artwork;
           })
         };
-        case 'ADD_COMMENT':
-      return {
-        ...state,
-        artworks: state.artworks.map(artwork => {
-          if (artwork.id === action.payload.artworkId) {
-            return {
-              ...artwork,
-              comments: [...artwork.comments, action.payload.comment]
-            };
-          }
-          return artwork;
-        })
-      };
+        
+      case 'ADD_COMMENT':
+        return {
+          ...state,
+          artworks: state.artworks.map(artwork => {
+            if (artwork.id === action.payload.artworkId) {
+              return {
+                ...artwork,
+                comments: [...artwork.comments, action.payload.comment]
+              };
+            }
+            return artwork;
+          })
+        };
       
       default:
         return state;
     }
-  };
+};
 
-  type AppProviderProps = {
-    children: ReactNode;
-  };  
+type AppProviderProps = {
+  children: ReactNode;
+};  
 
-export const AppProvider = ({ children }: { children: React.ReactNode }) => {
+// ✅ UNCOMMENT AND UPDATE THIS - No more mock data!
+export const AppProvider = ({ children }: AppProviderProps) => {
   const [state, dispatch] = useReducer(appReducer, {
-    artworks: mockArtworks,
-    users: mockUsers,
-    currentUser: mockUsers[0], // For now
+    artworks: [], // Start with empty array - real data will be loaded
+    users: [],    // Start with empty array
+    currentUser: null, // Start with null
   });
 
   return (

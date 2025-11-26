@@ -52,18 +52,14 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     try {
       setLoading(true);
       setLoadFailed(false);
-      console.log('🚀 Loading profile for user:', userId);
       
       // Load user data
       const userData = await directSupabaseService.getUser(userId);
-      console.log('✅ User data loaded successfully:', userData);
       setProfileUser(userData);
       
       // Load artworks
       const artworks = await directSupabaseService.getArtworks();
-      console.log('✅ Artworks loaded, count:', artworks.length);
       const userArtworks = artworks.filter(artwork => artwork.artistId === userId);
-      console.log('✅ User artworks filtered, count:', userArtworks.length);
       setUserLineArt(userArtworks);
       // Load user's colorizations
       const userColorizations = await directSupabaseService.getUserColorizations(userId);
@@ -102,7 +98,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         console.log('Profile load timeout - taking too long');
         setLoading(false);
       }
-    }, 15000); // 10 second timeout
+    }, 15000); // 15 second timeout
 
     loadUserProfile();
 
@@ -128,13 +124,11 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         await directSupabaseService.unfollowUser(currentUser.id, profileUser.id);
         setIsFollowing(false);
         setFollowerCount(prev => Math.max(0, prev - 1)); // Optimistic update
-        console.log('✅ Unfollowed user');
       } else {
         // Follow
         await directSupabaseService.followUser(currentUser.id, profileUser.id);
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1); // Optimistic update
-        console.log('✅ Followed user');
       }
     } catch (error) {
       console.error('❌ Error toggling follow:', error);
@@ -150,12 +144,11 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
   // Handle logout
   const handleLogoutPress = () => {
-    console.log('🎯 Logout button pressed');
     setShowLogoutModal(true);
   };
   
   const handleLogoutConfirm = async () => {
-    console.log('🚪 User confirmed logout...');
+
     setShowLogoutModal(false);
     try {
       await signOut();
@@ -378,26 +371,13 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   };
 
   const renderColorWorkTab = () => {
-    console.log('🎨 Color work data:', userColorWork);
-    console.log('🔍 DETAILED COLOR WORK ANALYSIS:');
-  console.log(`Total color works: ${userColorWork.length}`);
-  
   userColorWork.forEach((item, index) => {
-    console.log(`--- Color Work Item ${index} ---`);
-    console.log('ID:', item.id);
-    console.log('Title:', item.title);
-    console.log('Full URL:', item.lineArtUrl);
     
     if (item.lineArtUrl) {
-      console.log('URL Analysis:');
-      console.log('  - Is SVG extension:', item.lineArtUrl.includes('.svg'));
-      console.log('  - Is Supabase URL:', item.lineArtUrl.includes('supabase.co'));
-      console.log('  - Is public URL:', item.lineArtUrl.includes('/public/'));
-      console.log('  - URL starts with:', item.lineArtUrl.substring(0, 80));
+
     } else {
       console.log('❌ NO URL FOUND');
     }
-    console.log('----------------');
   });
   
   if (userColorWork.length === 0) {
@@ -426,24 +406,19 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       data={userColorWork}
       numColumns={2}
       renderItem={({ item }: { item: Artwork }) => {
-        console.log('🎨 Rendering color work item:', {
-          id: item.id,
-          title: item.title,
-          imageUrl: item.lineArtUrl,
-          urlType: typeof item.lineArtUrl
-        });
-        
+  
         return (
           <TouchableOpacity 
             style={styles.artworkItem}
             onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
           >
              <RemoteSVG 
-      uri={item.lineArtUrl}
-      width={150}
-      height={150}
-      style={styles.artworkImage}
-    />
+              uri={item.lineArtUrl}
+              lineArtUrl={item.originalLineArtUrl}
+              width={150}
+              height={150}
+              style={styles.artworkItem}
+          />
     
     <View style={styles.colorWorkBadge}>
       <Text style={styles.colorWorkBadgeText}>Colored by You</Text>

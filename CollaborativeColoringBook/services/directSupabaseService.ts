@@ -30,8 +30,6 @@ const makeRequest = async (endpoint: string, options: RequestInit = {}, requireA
     'Content-Type': 'application/json',
     'Prefer': 'return=representation'
   };
-
-  console.log('🔧 Direct fetch to:', endpoint);
   
   try {
     const response = await fetch(url, {
@@ -62,7 +60,6 @@ const makeRequest = async (endpoint: string, options: RequestInit = {}, requireA
 export const directSupabaseService = {
   async getUser(userId: string): Promise<User> {
     try {
-      console.log('🔍 Fetching user from Supabase with ID:', userId);
       
       // For user reads, we can use public access since RLS allows SELECT
       const url = `${supabaseUrl}/rest/v1/users?select=*&id=eq.${userId}`;
@@ -87,7 +84,6 @@ export const directSupabaseService = {
       }
 
       const userData = data[0];
-      console.log('✅ User data found:', userData);
 
       return {
         id: userData.id,
@@ -174,7 +170,6 @@ export const directSupabaseService = {
 
   async getArtworks(): Promise<Artwork[]> {
       try {
-        console.log('🖼️ Loading artworks from Supabase...');
         
         const url = `${supabaseUrl}/rest/v1/artworks?select=*,users!artworks_artist_id_fkey(display_name)`;
         
@@ -192,7 +187,6 @@ export const directSupabaseService = {
         }
     
         const data = await response.json();
-        console.log(`✅ Loaded ${data.length} artworks`);
         
         // Transform the data - handle missing user data gracefully
         const artworksWithColorizations = await Promise.all(
@@ -233,14 +227,12 @@ export const directSupabaseService = {
     imageUri: string, 
     userId: string
   ): Promise<Artwork> {
-    console.log('📤 Creating artwork record in database...');
     
     // Validate parameters
     if (!title || !imageUri || !userId) {
       throw new Error('Missing required fields for artwork upload');
     }
     try {
-      console.log('🔍 Verifying user exists:', userId);
       const userExists = await this.verifyUserExists(userId);
       
       if (!userExists) {
@@ -282,7 +274,6 @@ export const directSupabaseService = {
 
   async getUserColorizations(userId: string): Promise<Artwork[]> {
     try {
-      console.log('🎨 Loading colorizations for user:', userId);
       
       // Get colorized versions by this user
       const url = `${supabaseUrl}/rest/v1/colorized_versions?select=*,artworks(*,users!artworks_artist_id_fkey(display_name))&colorist_id=eq.${userId}`;
@@ -300,21 +291,16 @@ export const directSupabaseService = {
       }
   
       const data = await response.json();
-      console.log(`✅ Loaded ${data.length} colorizations`);
       
       // Transform the data
       return data.map((item: any) => {
-        console.log('🎨 Colorization data:', {
-          id: item.id,
-          coloredImageUrl: item.colored_image_url,
-          artworkTitle: item.artworks.title
-        });  
         return {
           id: item.id, // Use colorization ID
           title: `${item.artworks.title} (Colored)`,
           artist: item.artworks.users?.display_name || 'Unknown Artist',
           artistId: item.artworks.artist_id,
           lineArtUrl: item.colored_image_url, // This should be the SVG URL
+          originalLineArtUrl: item.artworks.line_art_url,
           colorizedVersions: [],
           likes: [],
           comments: [],
@@ -464,11 +450,9 @@ export const directSupabaseService = {
 
   async isLiked(artworkId: string, userId: string): Promise<boolean> {
     try {
-      console.log(`🔍 Checking if user ${userId} liked artwork ${artworkId}`);
       
       const data = await makeRequest(`likes?select=id&artwork_id=eq.${artworkId}&user_id=eq.${userId}`, {}, true);
       
-      console.log(`✅ Like check result: ${data.length > 0} (found ${data.length} records)`);
       return data.length > 0;
     } catch (error) {
       console.error('❌ Error checking like status:', error);
@@ -477,7 +461,6 @@ export const directSupabaseService = {
   },
   async followUser(followerId: string, followingId: string): Promise<boolean> {
     try {
-      console.log(`🔗 User ${followerId} following ${followingId}`);
       
       // First, add to follows table
       const followData = await makeRequest('follows', {
@@ -487,8 +470,6 @@ export const directSupabaseService = {
           following_id: followingId,
         }),
       }, true);
-
-      console.log('✅ Follow added to follows table');
 
       // Then update the user arrays (optional - for performance)
       // This part might be handled by database triggers, but we'll do it manually for now

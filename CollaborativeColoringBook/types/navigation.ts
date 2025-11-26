@@ -1,5 +1,4 @@
-import { Artwork } from '../data/mockData';
-import { User } from './User';
+import { Artwork } from './User';
 
 export type RootStackParamList = {
   Gallery: undefined;  

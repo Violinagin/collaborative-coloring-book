@@ -89,14 +89,6 @@ const ColoringScreen = ({ route, navigation }: Props) => {
     };
     
     setScaleInfo(newScaleInfo);
-    
-    console.log('📐 Dynamic scaling info:', {
-      originalImage: { imgWidth, imgHeight },
-      container: { containerWidth, containerHeight },
-      scale,
-      scaled: { scaledWidth, scaledHeight },
-      offset: { offsetX, offsetY }
-    });
   }, []);
 
   // Container layout handler

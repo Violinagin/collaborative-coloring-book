@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, Text, Dimensions } from 'react-native';
+import { View, ActivityIndicator, Text, Dimensions, Image } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 
 interface RemoteSVGProps {
@@ -8,13 +8,15 @@ interface RemoteSVGProps {
   height?: number;
   style?: any;
   aspectRatio?: number;
+  lineArtUrl?: string;
 }
 
-const RemoteSVG = ({ uri, width, height, style, aspectRatio }: RemoteSVGProps) => {
+const RemoteSVG = ({ uri, width, height, style, aspectRatio, lineArtUrl  }: RemoteSVGProps) => {
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
+  const [lineArtDimensions, setLineArtDimensions] = useState({ width: 0, height: 0 });
 
   // Calculate dynamic dimensions
   const calculateDimensions = () => {
@@ -99,17 +101,24 @@ const RemoteSVG = ({ uri, width, height, style, aspectRatio }: RemoteSVGProps) =
         extractedHeight = 400;
       }
       
-      console.log('📐 SVG dimensions extracted:', { 
-        extractedWidth, 
-        extractedHeight,
-        aspectRatio: (extractedWidth / extractedHeight).toFixed(3)
-      });
       return { width: extractedWidth, height: extractedHeight };
     } catch (error) {
       console.error('Error extracting SVG dimensions:', error);
       return { width: 400, height: 400 };
     }
   };
+
+   // Get line art dimensions
+  useEffect(() => {
+    if (lineArtUrl) {
+      Image.getSize(lineArtUrl, (width, height) => {
+        console.log('📐 Line art dimensions:', { width, height });
+        setLineArtDimensions({ width, height });
+      }, (error) => {
+        console.warn('⚠️ Could not get line art dimensions:', error);
+      });
+    }
+  }, [lineArtUrl]);
 
   useEffect(() => {
     const fetchSVG = async () => {
@@ -124,37 +133,22 @@ const RemoteSVG = ({ uri, width, height, style, aspectRatio }: RemoteSVGProps) =
             throw new Error('Invalid URI provided');
           }
       
-          console.log('📡 RemoteSVG: Making fetch request...');
           const response = await fetch(uri);
-          
-          console.log('📡 RemoteSVG: HTTP Response status:', response.status);
-          console.log('📡 RemoteSVG: HTTP Response ok:', response.ok);
-          console.log('📡 RemoteSVG: HTTP Response headers:', Object.fromEntries(response.headers.entries()));
           
           if (!response.ok) {
             console.log('❌ RemoteSVG: HTTP request failed');
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
       
-          console.log('📄 RemoteSVG: Reading response as text...');
           const text = await response.text();
-          
-          console.log('📄 RemoteSVG: Received text length:', text.length);
           
           if (!text || text.trim().length === 0) {
             console.log('❌ RemoteSVG: Empty response content');
             throw new Error('Empty SVG content');
           }
-      
-          console.log('📄 RemoteSVG: First 500 chars of response:');
-          console.log(text.substring(0, 500));
           
           // Check if it's actually SVG content
           const trimmedText = text.trim();
-          console.log('🔍 RemoteSVG: Checking if content is SVG...');
-          console.log('🔍 RemoteSVG: Starts with <svg:', trimmedText.startsWith('<svg'));
-          console.log('🔍 RemoteSVG: Starts with <?xml:', trimmedText.startsWith('<?xml'));
-          console.log('🔍 RemoteSVG: Contains <svg:', trimmedText.includes('<svg'));
           
           const isSvg = trimmedText.startsWith('<svg') || 
                        trimmedText.startsWith('<?xml') || 
@@ -166,13 +160,10 @@ const RemoteSVG = ({ uri, width, height, style, aspectRatio }: RemoteSVGProps) =
             throw new Error('Invalid SVG format - content does not appear to be SVG');
           }
       
-          console.log('✅ RemoteSVG: SVG content validated successfully');
-          console.log('✅ RemoteSVG: Setting SVG content state...');
           // Extract dimensions from SVG
         const dimensions = extractSvgDimensions(text);
         setSvgDimensions(dimensions);
         
-        console.log('✅ RemoteSVG: SVG loaded with dimensions:', dimensions);
         setSvgContent(text);
           setSvgContent(text);
           setError(null);
@@ -216,13 +207,28 @@ const RemoteSVG = ({ uri, width, height, style, aspectRatio }: RemoteSVGProps) =
   if (svgContent) {
     try {
       return (
-        <View style={[{ width, height }, style, { overflow: 'hidden'}]}>
-          <SvgXml 
-            xml={svgContent} 
-            width={displayDimensions.width} 
-            height={displayDimensions.height}
-            preserveAspectRatio="xMidYMid meet"
+        <View style={[{ width, height }, style, { overflow: 'hidden', position: 'relative'}]}>
+          {/* Line Art Background */}
+          {lineArtUrl && (
+        <View style={styles.lineArtBackground}>
+          <Image 
+            source={{ uri: lineArtUrl }} 
+            style={{
+              width: '100%',
+              height: '100%',
+            }}
+            resizeMode="contain"
           />
+        </View>
+      )}    
+          <View style={styles.svgOverlay}>
+        <SvgXml 
+          xml={svgContent} 
+          width={displayDimensions.width} 
+          height={displayDimensions.height}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      </View>
         </View>
       );
     } catch (svgError) {
@@ -268,7 +274,24 @@ const styles = {
     fontSize: 10,
     textAlign: 'center' as const,
     marginTop: 4,
-  }
+  },
+  lineArtBackground: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+    opacity: 0.8, // Slightly transparent so colors show through clearly
+  },
+  svgOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+  },  
 };
 
 export default RemoteSVG;

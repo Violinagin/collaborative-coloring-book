@@ -73,7 +73,6 @@ const UploadScreen = ({ navigation }: Props) => {
         setImage(result.assets[0].uri);
         const fileName = `artwork-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
         setImageName(fileName);
-        console.log('✅ Image selected:', result.assets[0].uri);
       }
     } catch (error) {
       console.error('Image picker error:', error);
@@ -107,7 +106,6 @@ const UploadScreen = ({ navigation }: Props) => {
   };
 
   const uploadImageToStorage = async (uri: string, fileName: string): Promise<string> => {
-    console.log('📤 Uploading image to storage...');
     
     const response = await fetch(uri);
     const blob = await response.blob();
@@ -123,8 +121,6 @@ const UploadScreen = ({ navigation }: Props) => {
       console.error('❌ Storage upload error:', error);
       throw new Error(`Failed to upload image: ${error.message}`);
     }
-
-    console.log('✅ Image uploaded to storage:', data);
 
     const { data: urlData } = supabase.storage
       .from('artworks')
@@ -154,7 +150,6 @@ const UploadScreen = ({ navigation }: Props) => {
       return;
     }
 
-    console.log('🚀 Starting real upload...');
     setUploading(true);
 
     try {
@@ -166,7 +161,6 @@ const UploadScreen = ({ navigation }: Props) => {
         user.id
       );
 
-      console.log('✅ Upload successful:', newArtwork);
       
       // Show success modal
       setModalContent({

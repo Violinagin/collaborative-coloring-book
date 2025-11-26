@@ -40,7 +40,8 @@ export interface Activity {
     title: string;
     artist: string;
     artistId: string;
-    lineArtUrl: string;
+    lineArtUrl: string; // This could be either original OR colored
+    originalLineArtUrl?: string;
     colorizedVersions: ColorizedVersion[];
     likes: string[];
     comments: Comment[];

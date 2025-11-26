@@ -58,7 +58,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const loadUserProfile = async (userId: string) => {
-    console.log('🔍 AuthContext: Loading user profile for ID:', userId);
     
     if (!userId) {
       console.error('❌ AuthContext: Cannot load user profile: empty user ID');
@@ -67,9 +66,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   
     try {
-      console.log('📡 AuthContext: Using direct service to load user...');
+
       const userProfile = await directSupabaseService.getUser(userId);
-      console.log('✅ AuthContext: User profile loaded successfully:', userProfile);
       setUser(userProfile);
     } catch (error) {
       console.error('❌ AuthContext: Error loading user profile:', error);
@@ -95,8 +93,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   
 
   const signUp = async (email: string, password: string, username: string, displayName: string) => {
-      console.log('Starting sign up process...');
-      console.log('Email:', email, 'Username:', username, 'DisplayName:', displayName);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -117,10 +113,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     
     // User profile will be created automatically by our trigger
     if (data.user) {
-      console.log('User created in auth, ID:', data.user.id);
       // Wait a moment for the trigger to create the profile, then load it
       setTimeout(() => {
-        console.log('Attempting to load user profile...');
         loadUserProfile(data.user!.id);
       }, 2000); // Increased delay to ensure trigger has time
       } else {
@@ -142,14 +136,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }
 
   const signOut = async () => {
-    console.log('🚪 Starting sign out process...');
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('❌ Sign out error:', error);
         throw error;
       }
-      console.log('✅ Sign out successful');
       // The auth state change listener will handle setting user to null
     } catch (error) {
       console.error('❌ Sign out failed:', error);

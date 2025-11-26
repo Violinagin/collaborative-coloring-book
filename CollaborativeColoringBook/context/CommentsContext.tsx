@@ -1,11 +1,14 @@
+// context/CommentsContext.tsx
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { mockArtworks, Artwork, Comment } from '../data/mockData';
+import { Comment } from '../types/User';
+import { directSupabaseService } from '../services/directSupabaseService';
+import { useAuth } from './AuthContext';
 
 type CommentsContextType = {
-  artworks: Artwork[];
-  addComment: (artworkId: string, commentText: string, userName: string) => void;
-  getComments: (artworkId: string) => Comment[];
-  getCommentCount: (artworkId: string) => number;
+  addComment: (artworkId: string, commentText: string) => Promise<void>;
+  getComments: (artworkId: string) => Promise<Comment[]>;
+  getCommentCount: (artworkId: string) => Promise<number>;
+  refreshComments: (artworkId: string) => Promise<void>;
 };
 
 const CommentsContext = createContext<CommentsContextType | undefined>(undefined);
@@ -15,48 +18,53 @@ type CommentsProviderProps = {
 };
 
 export const CommentsProvider = ({ children }: CommentsProviderProps) => {
-  const [artworks, setArtworks] = useState<Artwork[]>(mockArtworks);
+  const { user } = useAuth();
 
-  const addComment = (artworkId: string, commentText: string, userName: string) => {
-    if (!commentText.trim()) return; // Don't add empty comments
+  const addComment = async (artworkId: string, commentText: string) => {
+    if (!commentText.trim()) return;
+    if (!user) {
+      console.warn('User must be logged in to comment');
+      return;
+    }
 
-    const newComment: Comment = {
-      id: `comment-${Date.now()}`,
-      userId: `user-${userName}`, // Simple user ID for now
-      userName: userName,
-      text: commentText,
-      createdAt: new Date(),
-    };
-
-    setArtworks(prevArtworks => 
-      prevArtworks.map(artwork => {
-        if (artwork.id === artworkId) {
-          return {
-            ...artwork,
-            comments: [...artwork.comments, newComment]
-          };
-        }
-        return artwork;
-      })
-    );
+    try {
+      await directSupabaseService.addComment(artworkId, user.id, commentText);
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      throw error; // Re-throw so components can handle it
+    }
   };
 
-  const getComments = (artworkId: string) => {
-    const artwork = artworks.find(a => a.id === artworkId);
-    return artwork ? artwork.comments : [];
+  const getComments = async (artworkId: string): Promise<Comment[]> => {
+    try {
+      return await directSupabaseService.getComments(artworkId);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      return [];
+    }
   };
 
-  const getCommentCount = (artworkId: string) => {
-    const artwork = artworks.find(a => a.id === artworkId);
-    return artwork ? artwork.comments.length : 0;
+  const getCommentCount = async (artworkId: string): Promise<number> => {
+    try {
+      const comments = await getComments(artworkId);
+      return comments.length;
+    } catch (error) {
+      console.error('Error getting comment count:', error);
+      return 0;
+    }
+  };
+
+  const refreshComments = async (artworkId: string) => {
+    // This function can be used to force-refresh comments if needed
+    await getComments(artworkId);
   };
 
   return (
     <CommentsContext.Provider value={{
-      artworks,
       addComment,
       getComments,
       getCommentCount,
+      refreshComments,
     }}>
       {children}
     </CommentsContext.Provider>
