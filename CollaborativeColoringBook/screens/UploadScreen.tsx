@@ -28,7 +28,6 @@ const UploadScreen = ({ navigation }: Props) => {
   const [image, setImage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [imageName, setImageName] = useState<string>('');
-
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState(false);

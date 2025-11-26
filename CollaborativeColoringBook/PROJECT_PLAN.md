@@ -1,9 +1,8 @@
 # Collaborative Coloring Book - Project Plan
 
 ## Core Concept
-Original MVP - Social platform connecting line artists with colorists in a collaborative coloring book experience.
 
-Future - Social platform connecting artists of different roles (artist, writer, musician, animation, ect) for collaboration. And artist can upload an original project and other artists can build on the idea if they are so inspired.
+Social platform connecting artists of different roles (artist, writer, musician, animation, ect) for collaboration. And artist can upload an original project and other artists can build on the idea if they are so inspired.
 
 ## User Roles
 1. **Signed Up** - Can use the whole function of the app, but limits on sizes and amounts
@@ -25,13 +24,13 @@ Future - Social platform connecting artists of different roles (artist, writer, 
   - Upload
   - User Profiles
   - Profile Edit
-  - Social Feed
+  - Social Feed (future)
 
-### Backend (Future - Node.js/PostgreSQL)
+### Backend
 - User authentication
 - Image storage & processing
 - Social features (follow, notifications)
-- Real-time updates
+- Real-time updates (future)
 
 ### Current Project Organization
 
@@ -74,7 +73,6 @@ COLLABORATIVECOLORINGBOOK/
 │           └── useComments
 │   └── LikesContext.tsx
 ├── data/
-│   └── mockData.ts //would like to remove, but things are connected
 ├── hooks/
 ├── lib/
 │   └── supabase.ts (createClient)
@@ -88,9 +86,14 @@ COLLABORATIVECOLORINGBOOK/
 │   └── UploadScreen.tsx
 ├── services/
 │   └── directSupabaseService.ts
+│   └── worksService.ts
 ├── types/
+│   └── core.ts
 │   └── navigation.ts
 │   └── User.ts
+├── utils
+│   └── mediaUtils.ts
+│   └── typeConverters.ts
 ├── App.tsx
 ├── app.json
 ├── tsconfig.json

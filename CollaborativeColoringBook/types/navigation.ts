@@ -1,10 +1,11 @@
-import { Artwork } from './User';
+import { CreativeWork } from './core'; 
+import { User } from './User';
 
 export type RootStackParamList = {
   Gallery: undefined;  
-  ArtworkDetail: { artwork: Artwork };
+  ArtworkDetail: { artwork: CreativeWork };
   Profile: { userId: string }; 
-  Coloring: { artwork: Artwork };
+  Coloring: { artwork: CreativeWork };
   Upload: undefined;
   Auth: undefined;
   EditProfile: undefined;
