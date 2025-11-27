@@ -1,17 +1,8 @@
 import { supabase } from '../lib/supabase';
-import { CreativeWork, Collaboration, WorkWithContext, MediaType, MediaConfig, Artist } from '../types/core';
+import { CreativeWork, Collaboration, WorkWithContext, MediaType, MediaConfig, Artist, CreateWorkParams } from '../types/core';
 
 export const worksService = {
-  async createWork(workData: {
-    title: string;
-    description?: string;
-    mediaType: MediaType;
-    assetUrl: string;
-    mediaConfig: MediaConfig;
-    originalWorkId?: string;
-    tags?: string[];
-    visibility?: 'public' | 'private' | 'unlisted';
-  }): Promise<CreativeWork> {
+  async createWork(workData: CreateWorkParams): Promise<CreativeWork> {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
     
@@ -23,8 +14,13 @@ export const worksService = {
     }
     
     const work = {
-      ...workData,
-      artist_id: userData.user.id,
+      title: workData.title,
+      description: workData.description,
+      media_type: workData.mediaType,        
+      asset_url: workData.assetUrl,          
+      media_config: workData.mediaConfig,    
+      original_work_id: workData.originalWorkId, 
+      artist_id: userData.user.id,           
       derivation_chain: derivationChain,
       tags: workData.tags || [],
       visibility: workData.visibility || 'public',
@@ -36,9 +32,16 @@ export const worksService = {
       .insert(work)
       .select()
       .single();
+
+      console.log('📦 Database response:', data);
+  console.log('🆔 Database work ID:', data?.id);
     
     if (error) throw error;
+    const transformed = this.transformDatabaseWork(data);
+  console.log('🔄 Transformed work:', transformed);
+  console.log('🆔 Transformed work ID:', transformed.id);
     return this.transformDatabaseWork(data);
+    
   },
   
   async getWork(workId: string): Promise<CreativeWork> {
@@ -92,6 +95,8 @@ export const worksService = {
   },
   
   transformDatabaseWork(dbWork: any): CreativeWork {
+    console.log('🔄 Transforming db work:', dbWork);
+  console.log('🆔 DB work ID:', dbWork.id);
     return {
       id: dbWork.id,
       title: dbWork.title,

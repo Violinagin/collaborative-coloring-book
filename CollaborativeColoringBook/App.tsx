@@ -92,13 +92,7 @@ function Navigation() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppProvider>
-        <CommentsProvider>
-          <LikesProvider>
-            <Navigation />
-          </LikesProvider>
-        </CommentsProvider>
-      </AppProvider>
+      <Navigation />
     </AuthProvider>
   );
 }

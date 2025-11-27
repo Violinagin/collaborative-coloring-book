@@ -41,7 +41,15 @@ export interface LineArtConfig {
 export interface ColoredArtConfig {
   isColorable: boolean;
   originalLineArtId?: string;
+  complexity: 'simple' | 'medium' | 'complex';
   technique: 'flat' | 'gradient' | 'textured';
+}
+
+export interface DigitalArtConfig {
+  isColorable: false;
+  // Digital art can have its own specific properties
+  style?: 'painting' | 'vector' | 'pixel_art' | 'concept_art';
+  software?: string[];
 }
 
 export interface WritingConfig {
@@ -62,17 +70,15 @@ export interface AnimationConfig {
   technique: '2d' | '3d' | 'stop_motion';
 }
 
-export type MediaConfig = LineArtConfig | ColoredArtConfig | WritingConfig | MusicConfig | AnimationConfig;
+export type MediaConfig = LineArtConfig | ColoredArtConfig | DigitalArtConfig | WritingConfig | MusicConfig | AnimationConfig;
 
 // Main work interface
-export interface CreativeWork {
+export type CreativeWork = {
   id: string;
   title: string;
   description?: string;
   artistId: string;
-  mediaType: MediaType;
   assetUrl: string;
-  mediaConfig: MediaConfig;
   originalWorkId?: string;
   derivationChain: string[];
   metadata: Record<string, any>;
@@ -80,7 +86,30 @@ export interface CreativeWork {
   visibility: 'public' | 'private' | 'unlisted';
   createdAt: Date;
   updatedAt: Date;
-}
+} & (
+  | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
+  | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
+  | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
+  | { mediaType: 'writing'; mediaConfig: WritingConfig }
+  | { mediaType: 'music'; mediaConfig: MusicConfig }
+  | { mediaType: 'animation'; mediaConfig: AnimationConfig }
+);
+
+export type CreateWorkParams = {
+  title: string;
+  description?: string;
+  assetUrl: string;
+  originalWorkId?: string;
+  tags?: string[];
+  visibility?: 'public' | 'private' | 'unlisted';
+} & (
+  | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
+  | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
+  | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
+  | { mediaType: 'writing'; mediaConfig: WritingConfig }
+  | { mediaType: 'music'; mediaConfig: MusicConfig }
+  | { mediaType: 'animation'; mediaConfig: AnimationConfig }
+);
 
 export interface Collaboration {
   id: string;

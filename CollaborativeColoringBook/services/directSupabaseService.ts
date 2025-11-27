@@ -221,56 +221,46 @@ export const directSupabaseService = {
       }
     },
 
-  async uploadArtwork(
-    title: string, 
-    description: string, 
-    imageUri: string, 
-    userId: string
-  ): Promise<Artwork> {
-    
-    // Validate parameters
-    if (!title || !imageUri || !userId) {
-      throw new Error('Missing required fields for artwork upload');
-    }
-    try {
-      const userExists = await this.verifyUserExists(userId);
-      
-      if (!userExists) {
-        throw new Error('User profile not found. Please complete your profile setup.');
+    async uploadArtworkImage(fileUri: string, userId: string): Promise<string> {
+      try {
+        console.log('📤 Uploading image to storage...');
+        
+        // Convert React Native file URI to blob
+        const response = await fetch(fileUri);
+        const blob = await response.blob();
+        
+        // Generate unique filename
+        const fileExt = fileUri.split('.').pop() || 'jpg';
+        const fileName = `${userId}/${Date.now()}.${fileExt}`;
+        
+        console.log('📁 Uploading to storage:', fileName);
+        
+        // Upload to Supabase Storage
+        const { error } = await supabase.storage
+          .from('artworks')
+          .upload(fileName, blob, {
+            contentType: `image/${fileExt}`,
+            upsert: false
+          });
+        
+        if (error) {
+          console.error('❌ Storage upload error:', error);
+          throw error;
+        }
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+      .from('artworks')
+      .getPublicUrl(fileName);
+        
+      console.log('✅ Image uploaded to:', urlData.publicUrl);
+      return urlData.publicUrl;
+        
+      } catch (error) {
+        console.error('💥 Image upload failed:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('❌ User verification failed:', error);
-      throw new Error('Unable to verify user account. Please try logging out and back in.');
-    }
-  
-    const data = await makeRequest('artworks', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: title,
-        description: description || '',
-        artist_id: userId,
-        line_art_url: imageUri,
-      }),
-    }, true);
-  
-    const newArtwork = data[0];
-    
-    // Get user data for the response
-    const userData = await this.getUser(userId);
-    
-    return {
-      id: newArtwork.id,
-      title: newArtwork.title,
-      artist: userData.displayName,
-      artistId: userData.id,
-      lineArtUrl: newArtwork.line_art_url,
-      colorizedVersions: [],
-      likes: [],
-      comments: [],
-      createdAt: new Date(newArtwork.created_at),
-      description: newArtwork.description || undefined,
-    };
-  },
+    },
 
   async getUserColorizations(userId: string): Promise<Artwork[]> {
     try {

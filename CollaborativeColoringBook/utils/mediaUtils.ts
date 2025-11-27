@@ -1,5 +1,5 @@
 // utils/mediaUtils.ts
-import { CreativeWork, MediaConfig, LineArtConfig, ColoredArtConfig, MediaType } from '../types/core';
+import { CreativeWork, MediaConfig, LineArtConfig, ColoredArtConfig, MediaType, DigitalArtConfig } from '../types/core';
 
 export const mediaUtils = {
   // Check if a work is colorable
@@ -77,5 +77,14 @@ export const mediaUtils = {
       return config.layers || [];
     }
     return [];
+  },
+
+  // Add digital art style helper
+  getDigitalArtStyle(work: CreativeWork): string | null {
+    if (work.mediaType === 'digital_art') {
+      const config = work.mediaConfig as DigitalArtConfig;
+      return config.style || null;
+    }
+    return null;
   }
 };

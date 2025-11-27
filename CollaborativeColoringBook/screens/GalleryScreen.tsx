@@ -6,24 +6,23 @@ import {
   Image, 
   StyleSheet, 
   TouchableOpacity,
-  ListRenderItem,
   ActivityIndicator,
   RefreshControl 
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useIsFocused } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { worksService } from '../services/worksService';
+import { socialService } from '../services/socialService';
 import { CreativeWork } from '../types/core';
 import { mediaUtils } from '../utils/mediaUtils';
-import LikeButton from '../components/LikeButton';
-import CommentButton from '../components/CommentButton';
-import { directSupabaseService } from '../services/directSupabaseService';
 import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 
 const GalleryScreen = ({ navigation }: Props) => {
   const { user } = useAuth();
+  const isFocused = useIsFocused();
   const [works, setWorks] = useState<CreativeWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,16 +42,16 @@ const GalleryScreen = ({ navigation }: Props) => {
       const commentData: {[workId: string]: number} = {};
       
       const dataPromises = colorableWorks.map(async (work) => {
-        const [likeCount, comments, isLiked] = await Promise.all([
-          directSupabaseService.getLikeCount(work.id),
-          directSupabaseService.getComments(work.id),
-          user ? directSupabaseService.isLiked(work.id, user.id) : false
+        const [likeCount, workComments, isLiked] = await Promise.all([
+          socialService.getLikeCount(work.id),        
+          socialService.getComments(work.id),         
+          user ? socialService.isLiked(work.id, user.id) : false
         ]);
         
         return { 
           workId: work.id, 
           likeCount, 
-          commentCount: comments.length,
+          commentCount: workComments.length,
           isLiked 
         };
       });
@@ -79,6 +78,12 @@ const GalleryScreen = ({ navigation }: Props) => {
   };
 
   useEffect(() => {
+    if (isFocused) {
+      loadWorks();
+    }
+  }, [isFocused]);
+
+  useEffect(() => {
     loadWorks();
   }, [user]);
 
@@ -89,14 +94,26 @@ const GalleryScreen = ({ navigation }: Props) => {
 
   // Handle like - redirect to auth if not logged in
   const handleLike = async (workId: string) => {
+    console.log('🎯 ===== LIKE BUTTON PRESSED =====');
+  console.log('🆔 Work ID:', workId);
+  console.log('👤 User:', user?.id);
+  console.log('📊 Current like data:', likeData[workId]);
     if (!user) {
+      console.log('🚫 No user - redirecting to auth');
       navigation.navigate('Auth');
       return;
     }
-
+    console.log('✅ User authenticated, proceeding with like...');
     try {
       // Optimistic update
       const currentLikeState = likeData[workId]?.isLiked || false;
+      const currentCount = likeData[workId]?.count || 0;
+      console.log('🔄 Optimistic update - current state:', {
+        wasLiked: currentLikeState,
+        currentCount: currentCount,
+        newState: !currentLikeState,
+        newCount: currentLikeState ? currentCount - 1 : currentCount + 1
+      });
       setLikeData(prev => ({
         ...prev,
         [workId]: {
@@ -105,8 +122,12 @@ const GalleryScreen = ({ navigation }: Props) => {
         }
       }));
 
-      const nowLiked = await directSupabaseService.toggleLike(workId, user.id);
-      const newLikeCount = await directSupabaseService.getLikeCount(workId);
+      console.log('📞 Calling socialService.toggleLike...');
+    const nowLiked = await socialService.toggleLike(workId, user.id);
+    console.log('✅ socialService returned:', nowLiked);
+    
+    const newLikeCount = await socialService.getLikeCount(workId);
+    console.log('📈 Actual like count from database:', newLikeCount);
       
       // Update with actual database state
       setLikeData(prev => ({
@@ -116,13 +137,19 @@ const GalleryScreen = ({ navigation }: Props) => {
           isLiked: nowLiked
         }
       }));
+
+      console.log('🎉 Like operation completed successfully!');
+      console.log('📊 Final state:', {
+        isLiked: nowLiked,
+        count: newLikeCount
+      });
       
     } catch (error) {
       console.error('Error toggling like:', error);
       loadWorks(); // Reload to get correct state
     }
+    console.log('🎯 ===== LIKE OPERATION COMPLETE =====');
   };
-
 
   const renderWorkItem = ({ item }: { item: CreativeWork }) => {
     const likeInfo = likeData[item.id] || { count: 0, isLiked: false };
@@ -167,7 +194,13 @@ const GalleryScreen = ({ navigation }: Props) => {
           <View style={styles.actionsRow}>
             <TouchableOpacity 
               style={[styles.actionButton, likeInfo.isLiked && styles.likedButton]}
-              onPress={() => handleLike(item.id)}
+              onPress={() => {
+                console.log('🔘 LIKE BUTTON PHYSICALLY PRESSED for work:', item.id);
+                console.log('👆 Touch detected on button');
+                handleLike(item.id);
+              }}
+              onPressIn={() => console.log('⬇️ Button press started')}
+              onPressOut={() => console.log('⬆️ Button press ended')}
             >
               <Text style={styles.actionText}>
                 {likeInfo.isLiked ? '❤️' : '🤍'} {likeInfo.count}

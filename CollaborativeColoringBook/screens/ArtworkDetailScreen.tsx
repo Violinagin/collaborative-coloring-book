@@ -11,32 +11,44 @@ import {
   KeyboardAvoidingView,
   Platform, 
   ActivityIndicator,
-  Alert
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { CreativeWork, WorkWithContext } from '../types/core';
 import { worksService } from '../services/worksService';
-import { directSupabaseService } from '../services/directSupabaseService';
+import { socialService } from '../services/socialService'; 
 import LikeButton from '../components/LikeButton';
-import CommentButton from '../components/CommentButton';
 import { useAuth } from '../context/AuthContext';
 import { mediaUtils } from '../utils/mediaUtils';
-import { convertArtworkToCreativeWork } from '../utils/typeConverters';
+import { AlertModal } from '../components/AlertModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const { user } = useAuth();
-  const artworkFromParams: CreativeWork | undefined = route.params?.artwork 
-  ? convertArtworkToCreativeWork(route.params.artwork as any)
-  : undefined;
+  const artworkFromParams: CreativeWork = route.params?.artwork;
   const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [realLikeCount, setRealLikeCount] = useState(0);
   const [userLiked, setUserLiked] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
+
+  const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType(type);
+    setModalVisible(true);
+  };
+
+  const hideModal = () => {
+    setModalVisible(false);
+  };
 
   useEffect(() => {
     if (artworkFromParams) {
@@ -53,13 +65,16 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       setWorkContext(context);
       
       // Load real-time data (likes/comments) - we'll update these services next
-      const likeCount = await directSupabaseService.getLikeCount(workId);
-      setRealLikeCount(likeCount);
+      const [likeCount, workComments, liked] = await Promise.all([
+        socialService.getLikeCount(workId),
+        socialService.getComments(workId),
+        user ? socialService.isLiked(workId, user.id) : false
+      ]);
       
-      if (user) {
-        const liked = await directSupabaseService.isLiked(workId, user.id);
-        setUserLiked(liked);
-      }
+      setRealLikeCount(likeCount);
+      setUserLiked(liked);
+      setComments(workComments);
+      
     } catch (error) {
       console.error('Error loading work data:', error);
       // Fallback to basic work data
@@ -86,13 +101,12 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     
     setSubmittingComment(true);
     try {
-      await directSupabaseService.addComment(workContext.work.id, user.id, newComment.trim());
+      const newCommentObj = await socialService.addComment(workContext.work.id, user.id, newComment.trim());
+      setComments(prev => [...prev, newCommentObj]);
       setNewComment('');
-      // Reload to get updated comments
-      loadWorkData(workContext.work.id);
     } catch (error) {
       console.error('Error adding comment:', error);
-      Alert.alert('Error', 'Failed to add comment');
+      showModal('Error', 'Failed to add comment', 'error');
     } finally {
       setSubmittingComment(false);
     }
@@ -102,12 +116,25 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     if (!user || !workContext) return;
     
     try {
-      const nowLiked = await directSupabaseService.toggleLike(workContext.work.id, user.id);
+      // Optimistic update
+      setUserLiked(prev => !prev);
+      setRealLikeCount(prev => userLiked ? prev - 1 : prev + 1);
+
+      // Use NEW social service
+      const nowLiked = await socialService.toggleLike(workContext.work.id, user.id);
+      const newLikeCount = await socialService.getLikeCount(workContext.work.id);
+      
+      // Update with actual database state
       setUserLiked(nowLiked);
-      const newLikeCount = await directSupabaseService.getLikeCount(workContext.work.id);
       setRealLikeCount(newLikeCount);
+      
     } catch (error) {
       console.error('Error toggling like:', error);
+      // Revert optimistic update
+      const actualLikeCount = await socialService.getLikeCount(workContext.work.id);
+      const actualLikedState = await socialService.isLiked(workContext.work.id, user.id);
+      setRealLikeCount(actualLikeCount);
+      setUserLiked(actualLikedState);
     }
   };
 
@@ -135,6 +162,13 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+       <AlertModal
+        visible={modalVisible}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        onClose={hideModal}
+      />
       <ScrollView style={styles.scrollView}>
         {/* Work Image */}
         <Image 
@@ -158,13 +192,11 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           {/* Work Type Badge */}
           <View style={styles.workTypeBadge}>
             <Text style={styles.workTypeText}>
-              {work.mediaType === 'line_art' ? '🎨 Line Art' : 
-               work.mediaType === 'colored_art' ? '🌈 Colored Art' : 
-               '✨ Creative Work'}
+              {mediaUtils.getMediaTypeLabel(work.mediaType)}
             </Text>
-            {(work.mediaConfig as any).isColorable && (
-  <Text style={styles.colorableBadge}>🖍️ Colorable</Text>
-)}
+            {mediaUtils.isColorable(work) && (
+              <Text style={styles.colorableBadge}>🖍️ Colorable</Text>
+            )}
           </View>
           
           {work.description && (
@@ -191,14 +223,13 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
               onPress={handleLike}
               size="medium"
             />
-            <Text style={styles.stat}>
-              {collaborations.length} derivatives
-            </Text>
+            <Text style={styles.stat}>{comments.length} comments</Text>
+            <Text style={styles.stat}>{collaborations.length} derivatives</Text>
           </View>
 
           {/* Action Buttons */}
           <View style={styles.actions}>
-          {(work.mediaConfig as any).isColorable && (
+            {mediaUtils.isColorable(work) && (
               <TouchableOpacity 
                 style={styles.button}
                 onPress={() => navigation.navigate('Coloring', { artwork: work })}
@@ -216,20 +247,26 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
             </TouchableOpacity>
           </View>
 
-          {/* Derivatives Section */}
-          {collaborations.length > 0 && (
-            <View style={styles.derivativesSection}>
-              <Text style={styles.sectionTitle}>
-                Derivative Works ({collaborations.length})
-              </Text>
-              <Text style={styles.derivativeSubtitle}>
-                Other creations inspired by this work
-              </Text>
-              {/* We'll build a proper derivative gallery here */}
-            </View>
-          )}
+          {/* Comments Section */}
+          <View style={styles.commentsSection}>
+            <Text style={styles.sectionTitle}>
+              Comments ({comments.length})
+            </Text>
+            {comments.map(comment => (
+              <View key={comment.id} style={styles.comment}>
+                <Text style={styles.commentAuthor}>{comment.userName}:</Text>
+                <Text style={styles.commentText}>{comment.text}</Text>
+                <Text style={styles.commentDate}>
+                  {new Date(comment.createdAt).toLocaleDateString()}
+                </Text>
+              </View>
+            ))}
+            {comments.length === 0 && (
+              <Text style={styles.noComments}>No comments yet. Be the first!</Text>
+            )}
+          </View>
 
-          {/* Comment Section */}
+          {/* Add Comment Section */}
           {user && (
             <View style={styles.addCommentSection}>
               <Text style={styles.sectionTitle}>Add a Comment</Text>
@@ -258,6 +295,19 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
                 </TouchableOpacity>
               </View>
             </View>
+          )}
+
+          {/* Derivatives Section */}
+          {collaborations.length > 0 && (
+            <View style={styles.derivativesSection}>
+              <Text style={styles.sectionTitle}>
+                Derivative Works ({collaborations.length})
+              </Text>
+              <Text style={styles.derivativeSubtitle}>
+                Other creations inspired by this work
+              </Text>
+              {/* We'll build a proper derivative gallery here */}
+              </View>
           )}
         </View>
       </ScrollView>
@@ -438,6 +488,33 @@ const styles = StyleSheet.create({
   clickableArtist: {
     color: '#007AFF',
     textDecorationLine: 'underline',
+  },
+  commentsSection: {
+    marginBottom: 24,
+  },
+  comment: {
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  commentAuthor: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  commentText: {
+    color: '#333',
+    marginBottom: 4,
+  },
+  commentDate: {
+    fontSize: 12,
+    color: '#888',
+  },
+  noComments: {
+    fontStyle: 'italic',
+    color: '#666',
+    textAlign: 'center',
+    padding: 20,
   },
 });
 
