@@ -89,7 +89,6 @@ COLLABORATIVECOLORINGBOOK/
 │   └── UploadScreen.tsx
 ├── services/
 │   └── directSupabaseService.ts
-│   └── imageService
 │   └── worksService.ts
 │   └── socialService.ts
 ├── types/

@@ -68,24 +68,32 @@ export const svgAnalysisService = {
   },
   
   extractPaths(svgContent: string, paths: ColorablePath[]): void {
-    const pathRegex = /<path[^>]*d="([^"]*)"[^>]*\/?>/gi;
     const idRegex = /id="([^"]*)"/i;
     const classRegex = /class="([^"]*)"/i;
     
-    let match;
+    // Use matchAll instead of exec with global flag
+    const pathMatches = svgContent.matchAll(/<path[^>]*d="([^"]*)"[^>]*\/?>/gi);
     let pathCount = 0;
     
-    while ((match = pathRegex.exec(svgContent)) !== null) {
+    console.log('🔍 Starting path extraction with matchAll...');
+    
+    for (const match of pathMatches) {
+      pathCount++;
+      console.log(`🔍 Path ${pathCount}:`, {
+        fullTag: match[0].substring(0, 100),
+        hasD: !!match[1],
+        dLength: match[1]?.length
+      });
+      
       const fullPathTag = match[0];
       const pathData = match[1];
       
-      // Extract ID, class, or generate one
       const idMatch = fullPathTag.match(idRegex);
       const classMatch = fullPathTag.match(classRegex);
       
       const id = idMatch ? idMatch[1] : 
                  classMatch ? `class-${classMatch[1]}` : 
-                 `path-${pathCount++}`;
+                 `path-${pathCount}`;
       
       const bounds = this.calculatePathBounds(pathData);
       
@@ -97,8 +105,10 @@ export const svgAnalysisService = {
         stroke: '#000000'
       });
       
-      console.log(`📐 Found path: ${id}`, bounds);
+      console.log(`📐 Added path: ${id}`);
     }
+    
+    console.log(`📊 Total paths extracted: ${pathCount}`);
   },
   
   extractRects(svgContent: string, paths: ColorablePath[]): void {
@@ -219,26 +229,123 @@ export const svgAnalysisService = {
   },
 
   calculatePathBounds(pathData: string): { x: number; y: number; width: number; height: number } {
-    // Simplified bounds calculation
-    // In a real implementation, you'd properly parse the path data
-    const points = pathData.match(/(\d+(\.\d+)?)/g) || [];
-    const numbers = points.map(Number).filter(n => !isNaN(n));
-    
-    if (numbers.length === 0) {
-      return { x: 0, y: 0, width: 50, height: 50 };
+    try {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      
+      let currentX = 0;
+      let currentY = 0;
+      
+      // Parse SVG path commands
+      const commands = pathData.match(/[a-df-z]|[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/gi) || [];
+      
+      let i = 0;
+      while (i < commands.length) {
+        const command = commands[i];
+        
+        if (command.match(/[a-zA-Z]/)) {
+          // It's a command letter
+          const cmd = command;
+          i++;
+          
+          switch (cmd) {
+            case 'M': // absolute moveto
+            case 'L': // absolute lineto
+              currentX = parseFloat(commands[i++]);
+              currentY = parseFloat(commands[i++]);
+              break;
+              
+            case 'm': // relative moveto
+            case 'l': // relative lineto
+              currentX += parseFloat(commands[i++]);
+              currentY += parseFloat(commands[i++]);
+              break;
+              
+            case 'H': // absolute horizontal line
+              currentX = parseFloat(commands[i++]);
+              break;
+              
+            case 'h': // relative horizontal line
+              currentX += parseFloat(commands[i++]);
+              break;
+              
+            case 'V': // absolute vertical line
+              currentY = parseFloat(commands[i++]);
+              break;
+              
+            case 'v': // relative vertical line
+              currentY += parseFloat(commands[i++]);
+              break;
+              
+            case 'C': // absolute cubic bezier
+            case 'S': // absolute smooth cubic bezier
+            case 'Q': // absolute quadratic bezier
+            case 'T': // absolute smooth quadratic bezier
+              // For simplicity, just track the end point
+              const coordCount = cmd === 'C' ? 6 : cmd === 'S' ? 4 : cmd === 'Q' ? 4 : 2;
+              for (let j = 0; j < coordCount - 2; j++) i++; // skip control points
+              currentX = parseFloat(commands[i++]);
+              currentY = parseFloat(commands[i++]);
+              break;
+              
+            case 'c': // relative cubic bezier
+            case 's': // relative smooth cubic bezier
+            case 'q': // relative quadratic bezier
+            case 't': // relative smooth quadratic bezier
+              const relCoordCount = cmd === 'c' ? 6 : cmd === 's' ? 4 : cmd === 'q' ? 4 : 2;
+              for (let j = 0; j < relCoordCount - 2; j++) i++; // skip control points
+              currentX += parseFloat(commands[i++]);
+              currentY += parseFloat(commands[i++]);
+              break;
+              
+            case 'A': // absolute elliptical arc
+            case 'a': // relative elliptical arc
+              // Skip elliptical arc parameters (rx, ry, x-axis-rotation, large-arc-flag, sweep-flag)
+              for (let j = 0; j < 5; j++) i++;
+              if (cmd === 'A') {
+                currentX = parseFloat(commands[i++]);
+                currentY = parseFloat(commands[i++]);
+              } else {
+                currentX += parseFloat(commands[i++]);
+                currentY += parseFloat(commands[i++]);
+              }
+              break;
+              
+            case 'Z':
+            case 'z':
+              // Close path - no coordinates
+              break;
+          }
+          
+          // Update bounds
+          if (!isNaN(currentX) && !isNaN(currentY)) {
+            minX = Math.min(minX, currentX);
+            minY = Math.min(minY, currentY);
+            maxX = Math.max(maxX, currentX);
+            maxY = Math.max(maxY, currentY);
+          }
+        } else {
+          i++;
+        }
+      }
+      
+      // If we found valid bounds, use them
+      if (minX !== Infinity && minY !== Infinity) {
+        return {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY
+        };
+      }
+      
+    } catch (error) {
+      console.error('Error calculating path bounds:', error);
     }
     
-    // Find min/max coordinates (very simplified)
-    const minX = Math.min(...numbers.filter((_, i) => i % 2 === 0));
-    const maxX = Math.max(...numbers.filter((_, i) => i % 2 === 0));
-    const minY = Math.min(...numbers.filter((_, i) => i % 2 === 1));
-    const maxY = Math.max(...numbers.filter((_, i) => i % 2 === 1));
-    
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY
-    };
+    // Fallback for invalid paths
+    return { x: 0, y: 0, width: 50, height: 50 };
   }
 };

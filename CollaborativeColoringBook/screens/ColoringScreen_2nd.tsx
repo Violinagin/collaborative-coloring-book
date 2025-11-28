@@ -77,7 +77,7 @@ useEffect(() => {
   console.log('🎯 Artwork URL:', artwork.assetUrl);
   console.log('🎯 Is SVG?', artwork.assetUrl.toLowerCase().endsWith('.svg'));
   
-  if (artwork.assetUrl.toLowerCase().endsWith('.svg')) {
+  if (artwork.assetUrl.toLowerCase().match(/\.svg/)) {
     console.log('🎯 Starting SVG analysis...');
     analyzeArtworkSVG();
   } else {

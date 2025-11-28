@@ -228,12 +228,31 @@ export const directSupabaseService = {
         // Convert React Native file URI to blob
         const response = await fetch(fileUri);
         const blob = await response.blob();
+
+        let fileExt = 'jpg'; // default fallback
         
-        // Generate unique filename
-        const fileExt = fileUri.split('.').pop() || 'jpg';
-        const fileName = `${userId}/${Date.now()}.${fileExt}`;
-        
-        console.log('📁 Uploading to storage:', fileName);
+        // Try to get extension from original URI first
+    const originalUri = fileUri; // You might need to pass the original image picker URI separately
+    const uriParts = originalUri.split('.');
+    if (uriParts.length > 1) {
+      const potentialExt = uriParts.pop()?.toLowerCase();
+      // Only use if it's a common image extension
+      if (potentialExt && ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(potentialExt)) {
+        fileExt = potentialExt;
+      }
+    }
+    
+    // Alternative: detect from blob type
+    if (blob.type) {
+      const typeParts = blob.type.split('/');
+      if (typeParts.length > 1 && typeParts[1] !== 'octet-stream') {
+        fileExt = typeParts[1];
+      }
+    }
+    
+    const fileName = `${userId}/${Date.now()}.${fileExt}`;
+    
+    console.log('📁 Uploading to storage:', fileName, 'Type:', blob.type);
         
         // Upload to Supabase Storage
         const { error } = await supabase.storage

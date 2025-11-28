@@ -12,6 +12,7 @@ import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import { View, Text } from 'react-native';
+import SkiaColoringScreen from './screens/SkiaColoringScreen';
 
 
 // Create the navigator with your specific types
@@ -63,7 +64,7 @@ function Navigation() {
             />
             <Stack.Screen 
               name="Coloring" 
-              component={ColoringScreen}
+              component={SkiaColoringScreen}
               options={{ title: 'Color This Artwork' }}
             />
             <Stack.Screen 
