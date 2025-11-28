@@ -231,8 +231,16 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           <View style={styles.actions}>
             {mediaUtils.isColorable(work) && (
               <TouchableOpacity 
-                style={styles.button}
-                onPress={() => navigation.navigate('Coloring', { artwork: work })}
+              style={styles.button}
+              onPress={() => {
+                console.log('🎨 Color This button pressed');
+                console.log('📦 Artwork data:', work);
+                console.log('🆔 Artwork ID:', work.id);
+                console.log('📱 Navigation object:', navigation);
+                
+                // Test if navigation works at all
+                navigation.navigate('Coloring', { artwork: work });
+              }}
               >
                 <Text style={styles.buttonText}>🎨 Color This</Text>
               </TouchableOpacity>

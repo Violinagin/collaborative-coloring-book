@@ -4,9 +4,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import GalleryScreen from './screens/GalleryScreen';
 import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
 import { RootStackParamList } from './types/navigation';
-import { LikesProvider } from './context/LikesContext';
-import { CommentsProvider } from './context/CommentsContext';
-import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProfileScreen from './screens/ProfileScreen';
 import ColoringScreen from './screens/ColoringScreen';
@@ -15,7 +12,6 @@ import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import { View, Text } from 'react-native';
-import { supabase } from './lib/supabase';
 
 
 // Create the navigator with your specific types

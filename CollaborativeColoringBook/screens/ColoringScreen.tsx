@@ -1,4 +1,5 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+// screens/ColoringScreen.tsx - UPDATED FOR YOUR RemoteSVG
+import React, { useEffect, useState, useCallback, } from 'react';
 import { 
   View, 
   StyleSheet, 
@@ -7,335 +8,329 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Dimensions,
-  Image,
-  PanResponder
+  Image
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { Artwork } from '../types/User';
+import { CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
+import { worksService } from '../services/worksService';
 import { supabase } from '../lib/supabase';
-import Svg, { Path, G } from 'react-native-svg';
+import RemoteSVG from '../components/RemoteSVG';
+import { svgAnalysisService , ColorablePath } from '../services/svgAnalysisService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Coloring'>;
-
-interface DrawingPath {
-  path: string;
-  color: string;
-  strokeWidth: number;
-  points: { x: number; y: number }[];
-}
 
 const ColoringScreen = ({ route, navigation }: Props) => {
   const { artwork } = route.params;
   const { user } = useAuth();
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
-  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
-  const [scaleInfo, setScaleInfo] = useState({
-    scale: 1,
-    offsetX: 0,
-    offsetY: 0,
-    scaledWidth: 0,
-    scaledHeight: 0
-  });
-  const [currentColor, setCurrentColor] = useState('#FF6B6B');
-  const [strokeWidth, setStrokeWidth] = useState(8);
-  const [paths, setPaths] = useState<DrawingPath[]>([]);
-  const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('#FF6B6B');
+  const [coloredAreas, setColoredAreas] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const svgRef = useRef(null);
-
-  useEffect(() => {
-    if (artwork.lineArtUrl) {
-      Image.getSize(artwork.lineArtUrl, (width, height) => {
-        console.log('📐 Original image dimensions:', { width, height });
-        setImageDimensions({ width, height });
-        if (containerDimensions.width > 0 && containerDimensions.height > 0) {
-          calculateScaleInfo({ width, height }, containerDimensions);
-        }
-      }, (error) => {
-        console.warn('⚠️ Could not get image dimensions:', error);
-      });
-    }
-  }, [artwork.lineArtUrl]);
-
-  // Calculate scaling with aspect ratio preservation
-  const calculateScaleInfo = useCallback((imgDims: {width: number, height: number}, containerDims: {width: number, height: number}) => {
-    const { width: imgWidth, height: imgHeight } = imgDims;
-    const { width: containerWidth, height: containerHeight } = containerDims;
-    
-    if (imgWidth === 0 || imgHeight === 0 || containerWidth === 0 || containerHeight === 0) {
-      return;
-    }
-
-    const scaleX = containerWidth / imgWidth;
-    const scaleY = containerHeight / imgHeight;
-    const scale = Math.min(scaleX, scaleY);
-    
-    const scaledWidth = imgWidth * scale;
-    const scaledHeight = imgHeight * scale;
-    
-    const offsetX = (containerWidth - scaledWidth) / 2;
-    const offsetY = (containerHeight - scaledHeight) / 2;
-    
-    const newScaleInfo = {
-      scale,
-      offsetX,
-      offsetY,
-      scaledWidth,
-      scaledHeight
-    };
-    
-    setScaleInfo(newScaleInfo);
-  }, []);
-
-  // Container layout handler
-  const onContainerLayout = useCallback((event: any) => {
-    const { width: containerWidth, height: containerHeight } = event.nativeEvent.layout;
-    setContainerDimensions({ width: containerWidth, height: containerHeight });
-    
-    if (imageDimensions.width > 0 && imageDimensions.height > 0) {
-      calculateScaleInfo(imageDimensions, { width: containerWidth, height: containerHeight });
-    }
-  }, [imageDimensions, calculateScaleInfo]);
-
-  // Convert screen coordinates to image coordinates for storage
-  const screenToImageCoords = useCallback((screenX: number, screenY: number) => {
-    const { scale, offsetX, offsetY } = scaleInfo;
-    
-    if (scale === 0) return { x: screenX, y: screenY };
-    
-    const imageX = (screenX - offsetX) / scale;
-    const imageY = (screenY - offsetY) / scale;
-    
-    return {
-      x: Math.max(0, Math.min(imageX, imageDimensions.width)),
-      y: Math.max(0, Math.min(imageY, imageDimensions.height))
-    };
-  }, [scaleInfo, imageDimensions]);
-
-  // Color palette and brush sizes (keep your existing arrays)
+  const [colorablePaths, setColorablePaths] = useState<ColorablePath[]>([]);
+  const [analyzingSVG, setAnalyzingSVG] = useState(false);
+  
+  // Color palette
   const colorPalette = [
-    { color: '#FF6B6B', id: 'red' },
-    { color: '#4ECDC4', id: 'teal' },
-    { color: '#45B7D1', id: 'blue' },
-    { color: '#96CEB4', id: 'mint' },
-    { color: '#FFEAA7', id: 'yellow' },
-    { color: '#DDA0DD', id: 'plum' },
-    { color: '#98D8C8', id: 'seafoam' },
-    { color: '#F7DC6F', id: 'gold' },
-    { color: '#BB8FCE', id: 'lavender' },
-    { color: '#85C1E9', id: 'skyblue' },
-    { color: '#F8C471', id: 'orange' },
-    { color: '#82E0AA', id: 'lightgreen' },
-    { color: '#F1948A', id: 'coral' },
-    { color: '#A569BD', id: 'purple' },
-    { color: '#D7BDE2', id: 'lightpurple' },
-    { color: '#000000', id: 'black' },
-    { color: '#FFFFFF', id: 'white' },
-    { color: '#888888', id: 'gray' }
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+    '#F8C471', '#82E0AA', '#F1948A', '#A569BD', '#D7BDE2'
   ];
 
-  const brushSizes = [4, 8, 12, 16, 20];
+  // Analyze SVG when artwork loads
 
-  // Create SVG path data from points
-  const pointsToSvgPath = (points: { x: number; y: number }[]): string => {
-    if (points.length === 0) return '';
+const analyzeArtworkSVG = async () => {
+  console.log('🔄 analyzeArtworkSVG called - starting SVG analysis');
+  setAnalyzingSVG(true);
+  try {
+    console.log('🎯 Artwork URL:', artwork.assetUrl);
+    console.log('🔍 Is SVG?', artwork.assetUrl.toLowerCase().endsWith('.svg'));
     
-    let path = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      path += ` L ${points[i].x} ${points[i].y}`;
-    }
-    return path;
-  };
-
-  // Start new drawing path - STORE image coordinates
-  const startDrawing = useCallback((screenX: number, screenY: number) => {
-    const imageCoords = screenToImageCoords(screenX, screenY);
+    const response = await fetch(artwork.assetUrl);
+    console.log('📡 Fetch response status:', response.status);
     
-    const newPath: DrawingPath = {
-      path: '',
-      color: currentColor,
-      strokeWidth: strokeWidth,
-      points: [{ x: imageCoords.x, y: imageCoords.y }]
-    };
-    setCurrentPath(newPath);
-  }, [currentColor, strokeWidth, screenToImageCoords]);
-
-  // Add point to current path - STORE image coordinates
-  const addPoint = useCallback((screenX: number, screenY: number) => {
-    if (!currentPath) return;
+    const svgText = await response.text();
+    console.log('📄 SVG text length:', svgText.length);
+    console.log('📄 First 200 chars:', svgText.substring(0, 200));
     
-    const imageCoords = screenToImageCoords(screenX, screenY);
+    // Try calling the debug function directly
+    console.log('🔧 Calling svgAnalysisService.debugSVGContent...');
+    svgAnalysisService.debugSVGContent(svgText);
     
-    const updatedPath = {
-      ...currentPath,
-      points: [...currentPath.points, { x: imageCoords.x, y: imageCoords.y }]
-    };
-    setCurrentPath(updatedPath);
-  }, [currentPath, screenToImageCoords]);
+    console.log('🔧 Calling svgAnalysisService.analyzeSVG...');
+    const paths = await svgAnalysisService.analyzeSVG(artwork.assetUrl);
+    console.log('✅ Analysis complete, paths found:', paths.length);
+    
+    setColorablePaths(paths);
+    
+  } catch (error) {
+    console.error('❌ Error analyzing SVG:', error);
+  } finally {
+    setAnalyzingSVG(false);
+    console.log('🏁 Analysis finished');
+  }
+};
 
-  // Finish current path and add to paths array
-  const finishDrawing = useCallback(() => {
-    if (currentPath && currentPath.points.length > 1) {
-      const completedPath = {
-        ...currentPath,
-        path: pointsToSvgPath(currentPath.points)
-      };
-      setPaths(prev => [...prev, completedPath]);
-    }
-    setCurrentPath(null);
-  }, [currentPath]);
-
-  // Handle touch events
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (evt) => {
-      const { locationX, locationY } = evt.nativeEvent;
-      startDrawing(locationX, locationY);
-    },
-    onPanResponderMove: (evt) => {
-      const { locationX, locationY } = evt.nativeEvent;
-      addPoint(locationX, locationY);
-    },
-    onPanResponderRelease: () => {
-      finishDrawing();
-    },
-    onPanResponderTerminate: () => {
-      finishDrawing();
-    },
-  });
-
-  // Clear the canvas
-  const clearCanvas = () => {
-    setPaths([]);
-    setCurrentPath(null);
-  };
-
-  // Undo last path
-  const undoLastPath = () => {
-    setPaths(prev => prev.slice(0, -1));
-  };
-
-  // Save colorization to database
-  const saveColorizationToDatabase = async (imageUrl: string) => {
-    if (!user) return null;
-
-    try {
-      const { data, error } = await supabase
-        .from('colorized_versions')
-        .insert({
-          artwork_id: artwork.id,
-          colorist_id: user.id,
-          colored_image_url: imageUrl,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-
-    } catch (error) {
-      console.error('Error saving colorization:', error);
-      throw error;
-    }
-  };
-
-  // Upload colored image to storage
-  const uploadColoredImage = async (): Promise<string> => {
-    try {
-      const { width: svgWidth, height: svgHeight } = imageDimensions;
-
-      if (svgWidth === 0 || svgHeight === 0) {
-        throw new Error('Invalid image dimensions');
-      }
-
-      const svgString = `<?xml version="1.0" encoding="UTF-8"?>
-<svg 
-  width="${svgWidth}" 
-  height="${svgHeight}" 
-  viewBox="0 0 ${svgWidth} ${svgHeight}" 
-  xmlns="http://www.w3.org/2000/svg"
-  preserveAspectRatio="xMidYMid meet"
->
-  <!-- White background that matches the exact image dimensions -->
-  <rect width="100%" height="100%" fill="#FFFFFF"/>
+useEffect(() => {
+  console.log('🎯 useEffect triggered');
+  console.log('🎯 Artwork URL:', artwork.assetUrl);
+  console.log('🎯 Is SVG?', artwork.assetUrl.toLowerCase().endsWith('.svg'));
   
-  <!-- Colored paths - using original image coordinates -->
-  <g stroke-linecap="round" stroke-linejoin="round">
-    ${paths.map(pathData => 
-      `<path 
-        d="${pathData.path}" 
-        stroke="${pathData.color}" 
-        stroke-width="${pathData.strokeWidth}" 
-        fill="none"
-      />`
-    ).join('\n    ')}
-  </g>
-</svg>`;
+  if (artwork.assetUrl.toLowerCase().endsWith('.svg')) {
+    console.log('🎯 Starting SVG analysis...');
+    analyzeArtworkSVG();
+  } else {
+    console.log('🎯 Not an SVG, skipping analysis');
+  }
+}, [artwork.assetUrl]);
 
-      console.log('🎨 Dynamic SVG generated with correct aspect ratio:', { 
-        svgWidth, 
-        svgHeight,
-        aspectRatio: (svgWidth / svgHeight).toFixed(3),
-        pathCount: paths.length
-      });
+  const handleArtworkTap = useCallback((event: any) => {
 
-      const fileName = `colorizations/colorization-${artwork.id}-${user?.id}-${Date.now()}.svg`;
-      
-      const { data, error } = await supabase.storage
-        .from('artworks')
-        .upload(fileName, svgString, {
-          contentType: 'image/svg+xml',
-          cacheControl: '3600'
-        });
-
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage
-        .from('artworks')
-        .getPublicUrl(fileName);
-
-      console.log('✅ SVG saved with correct dimensions:', { 
-        url: urlData.publicUrl,
-        width: svgWidth,
-        height: svgHeight 
-      });
-      return urlData.publicUrl;
-      
-    } catch (error) {
-      console.error('Error uploading colorization:', error);
-      throw error;
+    const nativeEvent = event.nativeEvent || {};
+    console.log('🎯 Tap event type:', event.type);
+    console.log('🎯 Native event keys:', Object.keys(nativeEvent));
+    
+    // Get tap coordinates relative to the artwork container
+    // Try different event structures
+  const coords = event.nativeEvent || {};
+  const locationX = coords.locationX || coords.x;
+  const locationY = coords.locationY || coords.y;
+  
+  console.log('📍 Tap coordinates:', { locationX, locationY });
+  console.log('📍 Event keys:', Object.keys(coords));
+    console.log('📍 Tap event:', event.nativeEvent);
+    console.log('📍 Tap at:', { x: locationX, y: locationY });
+    if (locationX === undefined || locationY === undefined) {
+      console.log('❌ No valid coordinates found in event');
+      return;
     }
+    
+    if (locationX === undefined || locationY === undefined) {
+      console.log('❌ No valid coordinates found');
+      return;
+    }
+
+    // For Phase 1: Simple area detection based on tap position
+    const tappedArea = detectTappedArea(locationX, locationY);
+    
+    if (tappedArea) {
+      setColoredAreas(prev => ({
+        ...prev,
+        [tappedArea]: selectedColor
+      }));
+      console.log('🎨 Colored area:', tappedArea);
+    } else {
+      console.log('❌ No area detected at:', { x: locationX, y: locationY });
+    }
+  }, [selectedColor]);
+
+  const detectTappedArea = (x: number, y: number): string | null => {
+    // Check which SVG path contains the tap coordinates
+    for (const path of colorablePaths) {
+      const { bounds } = path;
+      const tolerance = 5;
+      
+      // First check the bounding box (fast)
+      if (x >= bounds.x - tolerance && 
+          x <= bounds.x + bounds.width + tolerance && 
+          y >= bounds.y - tolerance && 
+          y <= bounds.y + bounds.height + tolerance) {
+        
+        // TODO: In Phase 2.1, we'll add precise point-in-path detection
+        // For now, we'll use bounding boxes
+        console.log('🎯 Tapped path:', path.id);
+        return path.id;
+      }
+    }
+    
+    console.log('❌ No path detected at:', { x, y });
+    return null;
   };
+  
 
-  // Save colorization
-  const saveColorization = async () => {
+  // Save as a new colored_art work
+  const saveColoredWork = async () => {
     if (!user) {
-      Alert.alert('Login Required', 'Please log in to save your colorization.');
+      Alert.alert('Login Required', 'Please log in to save your coloring.');
       return;
     }
-
-    if (paths.length === 0) {
-      Alert.alert('No Coloring', 'Please color the artwork before saving.');
+  
+    if (Object.keys(coloredAreas).length === 0) {
+      Alert.alert('No Coloring', 'Please color some areas before saving.');
       return;
     }
-
-    setSaving(true);
+  
+    setIsSaving(true);
     try {
-      const imageUrl = await uploadColoredImage();
-      await saveColorizationToDatabase(imageUrl);
+      // Generate a new SVG with the colors applied
+      const coloredSVGUrl = await generateColoredSVG();
+      
+      // Create a new colored_art derivative with the ACTUAL colored image
+      const coloredWork = await worksService.createWork({
+        title: `Colored: ${artwork.title}`,
+        description: `A colorful interpretation of "${artwork.title}"`,
+        mediaType: 'colored_art',
+        mediaConfig: {
+          isColorable: false,
+          originalLineArtId: artwork.id,
+          complexity: 'medium',
+          technique: 'flat'
+        },
+        assetUrl: coloredSVGUrl, // Use the NEW colored SVG, not the original
+        originalWorkId: artwork.id,
+        tags: [...(artwork.tags || []), 'colored', 'derivative'],
+        visibility: 'public'
+      });
+  
+      // Create collaboration record
+      const { error: collabError } = await supabase
+        .from('collaborations')
+        .insert({
+          original_work_id: artwork.id,
+          derived_work_id: coloredWork.id,
+          collaboration_type: 'colorization',
+          description: 'Digital coloring collaboration',
+          context: {
+            colored_areas: coloredAreas,
+            color_palette: Array.from(new Set(Object.values(coloredAreas))),
+            colored_at: new Date().toISOString()
+          }
+        });
+  
+      if (collabError) throw collabError;
+  
       setShowSaveModal(true);
       
     } catch (error: any) {
-      console.error('Error saving colorization:', error);
-      Alert.alert('Save Failed', error.message || 'Failed to save colorization. Please try again.');
+      console.error('Error saving colored work:', error);
+      Alert.alert('Save Failed', error.message || 'Failed to save coloring. Please try again.');
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
+  };
+  
+  // ADD this function to generate the colored SVG
+  const generateColoredSVG = async (): Promise<string> => {
+    try {
+      if (!user) {
+        throw new Error('User must be logged in to save coloring');
+      }
+  
+      const svgWidth = 300;
+      const svgHeight = 400;
+      const isOriginalSVG = artwork.assetUrl.toLowerCase().endsWith('.svg');
+      
+      let svgString = '';
+      
+      if (isOriginalSVG) {
+        // For SVG originals - use actual path data
+        svgString = `<?xml version="1.0" encoding="UTF-8"?>
+  <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="http://www.w3.org/2000/svg">
+    <!-- White background -->
+    <rect width="100%" height="100%" fill="#FFFFFF"/>
+    
+    <!-- Original line art (faint) -->
+    <image 
+      href="${artwork.assetUrl}" 
+      width="100%" 
+      height="100%" 
+      opacity="0.3"
+      preserveAspectRatio="xMidYMid meet"
+    />
+    
+    <!-- Colored Areas - Using actual SVG paths -->
+    ${Object.entries(coloredAreas).map(([pathId, color]) => {
+      const path = colorablePaths.find(p => p.id === pathId);
+      if (path) {
+        return `<path 
+          d="${path.pathData}" 
+          fill="${color}" 
+          opacity="0.8"
+        >
+          <title>Colored path: ${pathId}</title>
+        </path>`;
+      }
+      return '';
+    }).filter(Boolean).join('\n  ')}
+  </svg>`;
+      } else {
+        // For PNG originals - keep the existing bounds-based approach
+        svgString = `<?xml version="1.0" encoding="UTF-8"?>
+  <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="http://www.w3.org/2000/svg">
+    <!-- White background -->
+    <rect width="100%" height="100%" fill="#FFFFFF"/>
+    
+    <!-- Simple outline to represent the original artwork -->
+    <rect 
+      x="10" y="10" 
+      width="${svgWidth - 20}" height="${svgHeight - 20}" 
+      fill="none" 
+      stroke="#CCCCCC" 
+      stroke-width="2"
+      stroke-dasharray="4,4"
+    />
+    
+    <!-- Colored Areas - Using path bounds for PNG -->
+    ${Object.entries(coloredAreas).map(([pathId, color]) => {
+      const path = colorablePaths.find(p => p.id === pathId);
+      if (path) {
+        const { bounds } = path;
+        return `<rect 
+          x="${bounds.x}" 
+          y="${bounds.y}" 
+          width="${bounds.width}" 
+          height="${bounds.height}" 
+          fill="${color}" 
+          opacity="0.8"
+        >
+          <title>Colored path: ${pathId}</title>
+        </rect>`;
+      }
+      return '';
+    }).filter(Boolean).join('\n  ')}
+    
+    <!-- Label indicating this is a colored version -->
+    <text 
+      x="${svgWidth / 2}" y="30" 
+      text-anchor="middle" 
+      font-family="Arial, sans-serif" 
+      font-size="14" 
+      fill="#666666"
+    >
+      Colored Version of: ${artwork.title}
+    </text>
+  </svg>`;
+      }
+
+    // Upload this SVG to Supabase Storage
+    const fileName = `colorizations/${user.id}/${artwork.id}-${Date.now()}.svg`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('artworks')
+      .upload(fileName, svgString, {
+        contentType: 'image/svg+xml',
+        cacheControl: '3600'
+      });
+
+    if (uploadError) throw uploadError;
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('artworks')
+      .getPublicUrl(fileName);
+
+    console.log('✅ Colored SVG saved:', urlData.publicUrl);
+    return urlData.publicUrl;
+    
+  } catch (error) {
+    console.error('Error generating colored SVG:', error);
+    throw error;
+  }
+};
+
+  const handleReset = () => {
+    setColoredAreas({});
   };
 
   const handleSaveModalClose = () => {
@@ -343,53 +338,54 @@ const ColoringScreen = ({ route, navigation }: Props) => {
     navigation.goBack();
   };
 
-  // FIXED: Convert image coordinates to screen coordinates for display
-  const getPathsForDisplay = useCallback(() => {
-    return paths.map(pathData => {
-      // Convert each point from image coordinates to screen coordinates
-      const screenPoints = pathData.points.map(point => {
-        const screenX = (point.x * scaleInfo.scale) + scaleInfo.offsetX;
-        const screenY = (point.y * scaleInfo.scale) + scaleInfo.offsetY;
-        return { x: screenX, y: screenY };
-      });
-      
-      return {
-        ...pathData,
-        path: pointsToSvgPath(screenPoints),
-        strokeWidth: pathData.strokeWidth * scaleInfo.scale
-      };
-    });
-  }, [paths, scaleInfo]);
-
-  const displayPaths = getPathsForDisplay();
-
-  // FIXED: Get current path for display
-  const getCurrentPathForDisplay = () => {
-    if (!currentPath || currentPath.points.length < 2) return null;
-    
-    // Convert current path points from image to screen coordinates
-    const screenPoints = currentPath.points.map(point => {
-      const screenX = (point.x * scaleInfo.scale) + scaleInfo.offsetX;
-      const screenY = (point.y * scaleInfo.scale) + scaleInfo.offsetY;
-      return { x: screenX, y: screenY };
-    });
-    
-    return pointsToSvgPath(screenPoints);
+  // Update your ColoringScreen to show potential colorable areas
+  const renderColorableAreas = () => {
+    if (analyzingSVG) {
+      return (
+        <View style={styles.analyzingContainer}>
+          <ActivityIndicator size="small" color="#007AFF" />
+          <Text style={styles.analyzingText}>Analyzing artwork...</Text>
+        </View>
+      );
+    }
+  
+    return colorablePaths.map(path => (
+      <TouchableOpacity
+        key={`path-${path.id}`}
+        style={[
+          styles.pathArea,
+          { 
+            left: path.bounds.x,
+            top: path.bounds.y,
+            width: path.bounds.width,
+            height: path.bounds.height
+          },
+          coloredAreas[path.id] ? styles.coloredPath : styles.uncoloredPath
+        ]}
+        onPress={() => {
+          setColoredAreas(prev => ({
+            ...prev,
+            [path.id]: selectedColor
+          }));
+        }}
+      >
+        <Text style={styles.pathLabel}>{path.id}</Text>
+      </TouchableOpacity>
+    ));
   };
 
-  const currentPathForDisplay = getCurrentPathForDisplay();
-
-  // Show loading while we get dimensions
-  if (imageDimensions.width === 0 || imageDimensions.height === 0) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading image...</Text>
-        </View>
-      </View>
-    );
-  }
+  // Render colored areas as simple overlays
+  const renderColoredOverlays = () => {
+    return Object.entries(coloredAreas).map(([areaId, color]) => (
+      <View
+        key={areaId}
+        style={[
+          styles.coloredArea, // Use the correct style name
+          { backgroundColor: color },
+        ]}
+      />
+    ));
+  };
 
   return (
     <View style={styles.container}>
@@ -405,11 +401,11 @@ const ColoringScreen = ({ route, navigation }: Props) => {
           Coloring: {artwork.title}
         </Text>
         <TouchableOpacity 
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={saveColorization}
-          disabled={saving}
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          onPress={saveColoredWork}
+          disabled={isSaving}
         >
-          {saving ? (
+          {isSaving ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
             <Text style={styles.saveButtonText}>Save</Text>
@@ -417,154 +413,68 @@ const ColoringScreen = ({ route, navigation }: Props) => {
         </TouchableOpacity>
       </View>
 
-      {/* Dynamic Coloring Area */}
-      <View 
-        style={styles.coloringArea}
-        onLayout={onContainerLayout}
-      >
-        {/* Background Line Art */}
-        {scaleInfo.scaledWidth > 0 && scaleInfo.scaledHeight > 0 && (
-          <>
-            <View style={[
-              styles.backgroundContainer,
-              {
-                left: scaleInfo.offsetX,
-                top: scaleInfo.offsetY,
-                width: scaleInfo.scaledWidth,
-                height: scaleInfo.scaledHeight,
-              }
-            ]}>
-              <Image 
-                source={{ uri: artwork.lineArtUrl }} 
-                style={{
-                  width: '100%',
-                  height: '100%',
-                }}
-                resizeMode="contain"
-              />
-            </View>
+      {/* Stats */}
+      <View style={styles.stats}>
+        <Text style={styles.statsText}>
+          {Object.keys(coloredAreas).length} area{Object.keys(coloredAreas).length !== 1 ? 's' : ''} colored
+        </Text>
+        <TouchableOpacity onPress={handleReset}>
+          <Text style={styles.resetText}>Reset</Text>
+        </TouchableOpacity>
+      </View>
 
-            {/* Drawing Canvas - FIXED: Use full container for touch area but scaled for display */}
-            <View 
-              style={[
-                styles.drawingCanvas,
-                {
-                  left: 0,
-                  top: 0,
-                  width: containerDimensions.width,
-                  height: containerDimensions.height,
-                }
-              ]}
-              {...panResponder.panHandlers}
-            >
-              <Svg 
-                style={{
-                  width: containerDimensions.width,
-                  height: containerDimensions.height,
-                  position: 'absolute',
-                }}
-                ref={svgRef}
-              >
-                {/* Render ONLY the display paths (screen coordinates) */}
-                <G>
-                  {displayPaths.map((pathData, index) => (
-                    <Path
-                      key={index}
-                      d={pathData.path}
-                      stroke={pathData.color}
-                      strokeWidth={pathData.strokeWidth}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
-                  ))}
-                </G>
-                
-                {/* Render current active path (screen coordinates) */}
-                {currentPathForDisplay && (
-                  <Path
-                    d={currentPathForDisplay}
-                    stroke={currentPath!.color}
-                    strokeWidth={currentPath!.strokeWidth * scaleInfo.scale}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                )}
-              </Svg>
-            </View>
-          </>
-        )}
-      </View>  
+      {/* Coloring Area */}
+      <View style={styles.coloringArea}>
+        <TouchableOpacity 
+          style={styles.artworkTouchable}
+          onPress={handleArtworkTap}
+          activeOpacity={0.9}
+        >
+          {/* Use RemoteSVG for the artwork */}
+          <View style={styles.artworkContainer}>
+      {/* Use regular Image for PNG/JPG, RemoteSVG for SVG */}
+      {artwork.assetUrl.toLowerCase().endsWith('.svg') ? (
+        <RemoteSVG
+          uri={artwork.assetUrl}
+          width={300}
+          height={400}
+          style={styles.artworkImage}
+        />
+      ) : (
+        <Image 
+          source={{ uri: artwork.assetUrl }}
+          style={[styles.artworkImage, { width: 300, height: 400 }]}
+          resizeMode="contain"
+        />
+      )}
+      
+      {/* Colored Areas Overlay */}
+      <View style={styles.overlayContainer}>
+        {renderColorableAreas()}
+        {renderColoredOverlays()}
+      </View>
+    </View>
+  </TouchableOpacity>
+  
+  <Text style={styles.tapHint}>Tap anywhere to color random areas</Text>
+</View>
 
-      {/* Rest of your UI (Color Palette, Brush Sizes, Tools) remains the same */}
+      {/* Color Palette */}
       <View style={styles.paletteSection}>
         <Text style={styles.sectionTitle}>Colors</Text>
         <View style={styles.colorGrid}>
-          {colorPalette.map(({ color, id }) => (
+          {colorPalette.map((color, index) => (
             <TouchableOpacity
-              key={id}
+              key={index}
               style={[
                 styles.colorOption,
                 { backgroundColor: color },
-                currentColor === color && styles.selectedColor,
-                color === '#FFFFFF' && styles.whiteColor,
+                selectedColor === color && styles.selectedColor,
               ]}
-              onPress={() => setCurrentColor(color)}
+              onPress={() => setSelectedColor(color)}
             />
           ))}
         </View>
-      </View>
-
-      <View style={styles.brushSection}>
-        <Text style={styles.sectionTitle}>Brush Size</Text>
-        <View style={styles.brushGrid}>
-          {brushSizes.map(size => (
-            <TouchableOpacity
-              key={size}
-              style={[
-                styles.brushOption,
-                strokeWidth === size && styles.selectedBrush
-              ]}
-              onPress={() => setStrokeWidth(size)}
-            >
-              <View 
-                style={[
-                  styles.brushPreview,
-                  { 
-                    width: size, 
-                    height: size,
-                    backgroundColor: currentColor,
-                    borderColor: currentColor === '#FFFFFF' ? '#ccc' : 'transparent'
-                  }
-                ]} 
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.toolsSection}>
-        <TouchableOpacity 
-          style={[styles.toolButton, paths.length === 0 && styles.toolButtonDisabled]}
-          onPress={undoLastPath}
-          disabled={paths.length === 0}
-        >
-          <Text style={[
-            styles.toolButtonText,
-            paths.length === 0 && styles.toolButtonTextDisabled
-          ]}>↶ Undo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.toolButton, paths.length === 0 && styles.toolButtonDisabled]}
-          onPress={clearCanvas}
-          disabled={paths.length === 0}
-        >
-          <Text style={[
-            styles.toolButtonText,
-            paths.length === 0 && styles.toolButtonTextDisabled
-          ]}>🗑️ Clear</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Save Success Modal */}
@@ -577,7 +487,7 @@ const ColoringScreen = ({ route, navigation }: Props) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Success! 🎉</Text>
             <Text style={styles.modalText}>
-              Your colorization has been saved! Others can now see your creative work.
+              Your coloring has been saved as a new artwork in the collaboration chain!
             </Text>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalPrimaryButton]}
@@ -592,9 +502,7 @@ const ColoringScreen = ({ route, navigation }: Props) => {
   );
 };
 
-// Your styles remain the same...
 const styles = StyleSheet.create({
-  // ... keep all your existing styles
   container: {
     flex: 1,
     backgroundColor: '#fff',
@@ -608,6 +516,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  coloredAreaStyle: { // Renamed to avoid conflict with the component
+    borderColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
   backButton: {
     padding: 8,
   },
@@ -615,6 +527,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#007AFF',
     fontWeight: '600',
+  },
+  coloredArea: { 
+    position: 'absolute',
+    opacity: 0.6,
+    borderRadius: 4,
+    pointerEvents: 'box-none',
   },
   title: {
     fontSize: 18,
@@ -624,7 +542,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   saveButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#4ECDC4',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
@@ -636,20 +554,60 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
   },
+  stats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+  },
+  statsText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  resetText: {
+    fontSize: 16,
+    color: '#FF6B6B',
+    fontWeight: '500',
+  },
   coloringArea: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
+    padding: 20,
   },
-  backgroundContainer: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
+  artworkTouchable: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  drawingCanvas: {
+  artworkContainer: {
+    position: 'relative',
+    width: 300,
+    height: 400,
+  },
+  artworkImage: {
+    opacity: 0.7, // Make line art faint so colors stand out
+  },
+  overlayContainer: {
     position: 'absolute',
-    backgroundColor: 'transparent',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    pointerEvents: 'box-none', // Allow taps to pass through to the artwork
+  },
+  tapHint: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
   paletteSection: {
     padding: 16,
@@ -674,61 +632,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  whiteColor: {
-    borderColor: '#ccc',
-  },
   selectedColor: {
     borderColor: '#333',
     transform: [{ scale: 1.1 }],
-  },
-  brushSection: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  brushGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  brushOption: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedBrush: {
-    borderColor: '#007AFF',
-    backgroundColor: '#f0f8ff',
-  },
-  brushPreview: {
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  toolsSection: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    gap: 12,
-  },
-  toolButton: {
-    flex: 1,
-    backgroundColor: '#f0f0f0',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  toolButtonDisabled: {
-    backgroundColor: '#f8f8f8',
-  },
-  toolButtonText: {
-    fontWeight: '600',
-  },
-  toolButtonTextDisabled: {
-    color: '#ccc',
   },
   modalOverlay: {
     flex: 1,
@@ -764,22 +670,100 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalPrimaryButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#4ECDC4',
   },
   modalPrimaryText: {
     color: 'white',
     fontWeight: '600',
   },
-  loadingContainer: {
-    flex: 1,
+  uncoloredArea: {
+    borderColor: 'rgba(0,255,0,0.3)',
+    backgroundColor: 'rgba(0,255,0,0.1)',
+  },
+  areaLabel: {
+    fontSize: 10,
+    color: 'rgba(0,0,0,0.7)',
+    fontWeight: 'bold',
+  },
+  areaBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 4,
+  },
+  colorableArea: {
+    position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
+    borderWidth: 2,
+    borderRadius: 4,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+  coloredAreaOverlay: { // Renamed to avoid conflict
+    position: 'absolute',
+    opacity: 0.6,
+    borderRadius: 4,
+  },
+  analyzingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 8,
+    zIndex: 10, // Ensure it appears above everything
+  },
+  
+  analyzingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#4ECDC4',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  
+  pathArea: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 3,
+    // Smooth shadow for depth
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  
+  coloredPath: {
+    borderColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Very subtle background
+    // Remove background when colored to let the actual color show through
+  },
+  
+ // TEMPORARY DEBUG STYLES
+uncoloredPath: {
+  borderColor: 'rgba(255, 0, 0, 0.8)', // Bright red for easy visibility
+  backgroundColor: 'rgba(255, 0, 0, 0.2)',
+  borderWidth: 2,
+},
+  
+  pathLabel: {
+    fontSize: 7, // Even smaller for tight spaces
+    color: 'rgba(0, 0, 0, 0.8)',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Semi-transparent background
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    borderRadius: 2,
   },
 });
 
