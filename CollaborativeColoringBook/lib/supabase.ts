@@ -1,5 +1,6 @@
 // lib/supabase.ts - UPDATED WITH API KEY FIX
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -10,34 +11,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
+    storage: AsyncStorage,
     flowType: 'pkce',
+    debug: true,
   },
   global: {
-    headers: {
-      'apikey': supabaseAnonKey, // Add this line
-      'X-Client-Info': 'coloring-book-app',
-    },
     fetch: (...args) => {
       console.log('🌐 Supabase Fetch:', {
         url: args[0],
         method: args[1]?.method,
+        headers: args[1]?.headers,
       });
       
-      // Ensure the API key is included
-      const options = {
-        ...args[1],
-        headers: {
-          ...args[1]?.headers,
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${supabaseAnonKey}`, // Also try this
-        },
-      };
-      
-      return fetch(args[0], options)
+      return fetch(...args)
         .then(response => {
           console.log('🌐 Supabase Response:', {
             status: response.status,
             statusText: response.statusText,
+            url: args[0],
           });
           return response;
         })

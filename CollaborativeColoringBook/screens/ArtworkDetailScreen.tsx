@@ -69,7 +69,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       const [likeCount, workComments, liked] = await Promise.all([
         socialService.getLikeCount(workId),
         socialService.getComments(workId),
-        user ? socialService.isLiked(workId, user.id) : false
+        user ? socialService.isLiked(workId) : false
       ]);
       
       setRealLikeCount(likeCount);
@@ -101,13 +101,20 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   };
 
   const handleAddComment = async () => {
+
+    console.log('💬 handleAddComment called with:', {
+      newComment: newComment, // What's actually in the input?
+      workId: workContext?.work.id,
+      userId: user?.id
+    });
+
     if (!user || !workContext) return;
     
     if (!newComment.trim()) return;
     
     setSubmittingComment(true);
     try {
-      const newCommentObj = await socialService.addComment(workContext.work.id, user.id, newComment.trim());
+      const newCommentObj = await socialService.addComment(workContext.work.id, newComment.trim());
       setComments(prev => [...prev, newCommentObj]);
       setNewComment('');
     } catch (error) {
@@ -138,7 +145,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       console.error('Error toggling like:', error);
       // Revert optimistic update
       const actualLikeCount = await socialService.getLikeCount(workContext.work.id);
-      const actualLikedState = await socialService.isLiked(workContext.work.id, user.id);
+      const actualLikedState = await socialService.isLiked(workContext.work.id);
       setRealLikeCount(actualLikeCount);
       setUserLiked(actualLikedState);
     }
@@ -188,12 +195,19 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           <Text style={styles.title}>{work.title}</Text>
           
           <TouchableOpacity 
-            onPress={() => navigation.navigate('Profile', { userId: artist.id })}
-          >
-            <Text style={[styles.artist, styles.clickableArtist]}>
-              by {artist?.displayName}
-            </Text>
-          </TouchableOpacity>
+  onPress={() => {
+    if (artist?.id) {
+      navigation.navigate('Profile', { userId: artist.id });
+    } else {
+      console.log('No artist available for navigation');
+    }
+  }}
+  disabled={!artist?.id} // Optional: disable if no artist
+>
+  <Text style={[styles.artist, styles.clickableArtist]}>
+    by {artist?.displayName || 'Unknown Artist'}
+  </Text>
+</TouchableOpacity>
           
           {/* Work Type Badge */}
           <View style={styles.workTypeBadge}>

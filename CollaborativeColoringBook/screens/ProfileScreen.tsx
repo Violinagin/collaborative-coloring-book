@@ -372,7 +372,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         renderItem={({ item }: { item: CreativeWork }) => (
           <TouchableOpacity 
             style={styles.artworkItem}
-            onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+            onPress={() => navigation.navigate('ArtworkDetail', { work: item })}
           >
             <Image source={{ uri: item.assetUrl }} style={styles.artworkImage} />
           </TouchableOpacity>
@@ -423,7 +423,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         return (
           <TouchableOpacity 
             style={styles.artworkItem}
-            onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+            onPress={() => navigation.navigate('ArtworkDetail', { work: item })}
           >
              <RemoteSVG 
               uri={item.assetUrl}

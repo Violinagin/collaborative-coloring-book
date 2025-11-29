@@ -1,16 +1,22 @@
 // services/socialService.ts
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 export const socialService = {
-  // Likes
+
+  // Likes - USE AUTHENTICATED USER
   async toggleLike(workId: string, userId: string): Promise<boolean> {
     try {
+      console.log('❤️ Toggling like for work:', workId, 'by user:', userId);
+      
       // Check if already liked
-      const { data: existingLikes } = await supabase
+      const { data: existingLikes, error: checkError } = await supabase
         .from('likes')
         .select('id')
         .eq('work_id', workId)
         .eq('user_id', userId);
+
+      if (checkError) throw checkError;
 
       if (existingLikes && existingLikes.length > 0) {
         // Unlike
@@ -26,7 +32,10 @@ export const socialService = {
         // Like
         const { error } = await supabase
           .from('likes')
-          .insert({ work_id: workId, user_id: userId });
+          .insert({ 
+            work_id: workId, 
+            user_id: userId
+          });
         
         if (error) throw error;
         return true;
@@ -47,16 +56,20 @@ export const socialService = {
     return count || 0;
   },
 
-  async isLiked(workId: string, userId: string): Promise<boolean> {
+  async isLiked(workId: string): Promise<boolean> { // Remove userId parameter
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
     const { data, error } = await supabase
       .from('likes')
       .select('id')
       .eq('work_id', workId)
-      .eq('user_id', userId);
+      .eq('user_id', user.id); // Use authenticated user ID
 
     if (error) throw error;
     return (data && data.length > 0) || false;
   },
+
 
   // Comments
   async getComments(workId: string) {
@@ -70,22 +83,27 @@ export const socialService = {
       .order('created_at', { ascending: true });
 
     if (error) throw error;
+
+    console.log('💬 Raw comments data:', data);
     
     return data?.map(comment => ({
       id: comment.id,
       userId: comment.user_id,
-      userName: comment.user?.display_name || 'Unknown User',
+      userName: comment.user?.display_name || comment.user?.username || 'Unknown User',
       text: comment.text,
       createdAt: new Date(comment.created_at)
     })) || [];
   },
 
-  async addComment(workId: string, userId: string, text: string) {
+  async addComment(workId: string, text: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     const { data, error } = await supabase
       .from('comments')
       .insert({
         work_id: workId,
-        user_id: userId,
+        user_id: user.id, // Use authenticated user ID
         text: text
       })
       .select(`
@@ -187,7 +205,7 @@ export const socialService = {
       return 0;
     }
   },
-  // Bonus: Get follower and following lists
+  
   async getFollowers(userId: string): Promise<string[]> {
     try {
       const { data, error } = await supabase

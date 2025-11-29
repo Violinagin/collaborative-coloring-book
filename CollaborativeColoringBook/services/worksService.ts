@@ -56,31 +56,78 @@ export const worksService = {
   },
   
   async getWorksWithContext(workId: string): Promise<WorkWithContext> {
-    // Get work with artist and collaborations
-    const { data: workData, error } = await supabase
-      .from('works')
-      .select(`
-        *,
-        artist:users(*),
-        collaborations:collaborations!derived_work_id(*)
-      `)
-      .eq('id', workId)
-      .single();
-    
-    if (error) throw error;
-    
-    // Get original work if this is a derivative
-    let originalWork = undefined;
-    if (workData.original_work_id) {
-      originalWork = await this.getWork(workData.original_work_id);
+    try {
+      console.log('🔍 Fetching work with context for ID:', workId);
+      
+      const { data: workData, error } = await supabase
+        .from('works')
+        .select(`
+          *,
+          artist:users(*),
+          collaborations:collaborations!derived_work_id(*)
+        `)
+        .eq('id', workId);
+  
+      if (error) {
+        console.error('❌ Error fetching work with context:', error);
+        throw error;
+      }
+  
+      if (!workData || workData.length === 0) {
+        console.error('❌ No work found with ID:', workId);
+        throw new Error('Work not found');
+      }
+  
+      // Take the first element since we're querying by unique ID
+      const work = workData[0];
+      
+      console.log('✅ Raw work data:', work);
+      console.log('👤 Raw artist data:', work.artist);
+      console.log('🤝 Raw collaborations:', work.collaborations);
+  
+      // Transform the main work first
+      const transformedWork = this.transformDatabaseWork(work);
+      
+      // Get original work if this is a derivative
+      let originalWork = undefined;
+      if (work.original_work_id) {
+        try {
+          originalWork = await this.getWork(work.original_work_id);
+        } catch (error) {
+          console.error('❌ Error fetching original work:', error);
+        }
+      }
+  
+      // Transform artist and collaborations
+      const artist = this.transformDatabaseUser(work.artist);
+      const collaborations: Collaboration[] = (work.collaborations || []).map((collab: any) => ({
+        id: collab.id,
+        originalWorkId: collab.original_work_id,
+        derivedWorkId: collab.derived_work_id,
+        collaborationType: collab.collaboration_type,
+        context: collab.context || {},
+        description: collab.description,
+        attribution: collab.attribution || 'Inspired by',
+        createdAt: new Date(collab.created_at),
+      }));
+  
+      console.log('✅ Final transformed data:', {
+        workTitle: transformedWork.title,
+        artistName: artist?.displayName,
+        assetUrl: transformedWork.assetUrl,
+        collaborationsCount: collaborations.length
+      });
+  
+      return {
+        work: transformedWork,
+        originalWork,
+        collaborations,
+        artist
+      };
+    } catch (error) {
+      console.error('❌ Error in getWorksWithContext:', error);
+      throw error;
     }
-    
-    return {
-      work: this.transformDatabaseWork(workData),
-      originalWork,
-      collaborations: workData.collaborations || [],
-      artist: this.transformDatabaseUser(workData.artist)
-    };
   },
   
   async getColorableWorks(): Promise<CreativeWork[]> {
@@ -116,16 +163,21 @@ export const worksService = {
   },
 
   transformDatabaseUser(dbArtist: any): User | undefined {
-    if (!dbArtist) return undefined;
-
+    if (!dbArtist) {
+      console.log('👤 No artist data provided');
+      return undefined;
+    }
+  
+    console.log('👤 Transforming artist:', dbArtist);
+  
     return {
       id: dbArtist.id,
       username: dbArtist.username,
-      displayName: dbArtist.display_name, // ✅ Use frontend naming
-      avatarUrl: dbArtist.avatar_url,     // ✅ Use frontend naming
+      displayName: dbArtist.display_name,
+      avatarUrl: dbArtist.avatar_url,
       bio: dbArtist.bio || '',
-      roles: dbArtist.roles || ['supporter'],
-      joinedDate: new Date(dbArtist.joined_date || Date.now()),
+      roles: dbArtist.roles || ['supporter'], 
+      joinedDate: new Date(dbArtist.joined_date || dbArtist.created_at || Date.now()),
       uploadedArtworks: dbArtist.uploaded_artworks || [],
       colorizedVersions: dbArtist.colorized_versions || [],
       likedArtworks: dbArtist.liked_artworks || []
