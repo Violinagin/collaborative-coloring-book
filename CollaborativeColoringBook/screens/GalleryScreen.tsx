@@ -9,9 +9,6 @@ import {
   ActivityIndicator,
   RefreshControl 
 } from 'react-native';
-import { LoadingState } from '../components/LoadingState';
-import { ErrorState } from '../components/ErrorState';
-import { EmptyState } from '../components/EmptyState';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
@@ -120,7 +117,7 @@ const GalleryScreen = ({ navigation }: Props) => {
       setLikeData(prev => ({
         ...prev,
         [workId]: {
-          count: currentLikeState ? prev[workId]?.count - 1 : prev[workId]?.count + 1,
+          count: currentLikeState ? currentCount - 1 : currentCount + 1,
           isLiked: !currentLikeState
         }
       }));
@@ -161,7 +158,8 @@ const GalleryScreen = ({ navigation }: Props) => {
     return (
       <TouchableOpacity 
         style={styles.workCard}
-        onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+        onPress={() => navigation.navigate('ArtworkDetail', { 
+          work: item, })}
       >
         <Image 
           source={{ uri: item.assetUrl }} 
@@ -198,12 +196,8 @@ const GalleryScreen = ({ navigation }: Props) => {
             <TouchableOpacity 
               style={[styles.actionButton, likeInfo.isLiked && styles.likedButton]}
               onPress={() => {
-                console.log('🔘 LIKE BUTTON PHYSICALLY PRESSED for work:', item.id);
-                console.log('👆 Touch detected on button');
                 handleLike(item.id);
               }}
-              onPressIn={() => console.log('⬇️ Button press started')}
-              onPressOut={() => console.log('⬆️ Button press ended')}
             >
               <Text style={styles.actionText}>
                 {likeInfo.isLiked ? '❤️' : '🤍'} {likeInfo.count}
@@ -212,19 +206,21 @@ const GalleryScreen = ({ navigation }: Props) => {
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
+              onPress={() => navigation.navigate('ArtworkDetail', { 
+                work: item, 
+               })}
             >
               <Text style={styles.actionText}>💬 {commentCount}</Text>
             </TouchableOpacity>
             
-            {mediaUtils.isColorable(item) && (
+            {/* {mediaUtils.isColorable(item) && (
               <TouchableOpacity 
                 style={styles.colorButton}
                 onPress={() => navigation.navigate('SkiaColoring', { work: item })}
               >
                 <Text style={styles.colorButtonText}>🎨 Color</Text>
               </TouchableOpacity>
-            )}
+            )} */}
           </View>
         </View>
       </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import GalleryScreen from './screens/GalleryScreen';
@@ -23,13 +23,46 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function Navigation() {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
+  console.log('🔐 Auth state:', { user, loading });
+
+  // if (loading) {
+  //   return (
+  //     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+  //       <Text>Loading...</Text>
+  //     </View>
+  //   );
+  // }
+
+  useEffect(() => {
+    const testDirectFetch = async () => {
+      console.log('🧪 Testing direct fetch to Supabase...');
+      
+      try {
+        const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/users?select=id&limit=1`, {
+          headers: {
+            'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        console.log('🧪 Direct fetch result:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('🧪 Direct fetch data:', data);
+        }
+      } catch (error) {
+        console.error('🧪 Direct fetch error:', error);
+      }
+    };
+    
+    testDirectFetch();
+  }, []);
 
   return (
     <NavigationContainer>

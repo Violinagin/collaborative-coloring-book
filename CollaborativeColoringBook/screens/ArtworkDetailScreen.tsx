@@ -26,7 +26,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const { user } = useAuth();
-  const artworkFromParams: CreativeWork = route.params?.artwork;
+  const { work } = route.params;
   const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -52,10 +52,10 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   };
 
   useEffect(() => {
-    if (artworkFromParams) {
-      loadWorkData(artworkFromParams.id);
+    if (work) {
+      loadWorkData(work.id);
     }
-  }, [artworkFromParams]);
+  }, [work]);
 
   const loadWorkData = async (workId: string) => {
     try {
@@ -79,14 +79,19 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     } catch (error) {
       console.error('Error loading work data:', error);
       // Fallback to basic work data
-      if (artworkFromParams) {
+      if (work) {  // ← Change from artworkFromParams to work
         setWorkContext({
-          work: artworkFromParams,
+          work: work,  // ← Use work here
           collaborations: [],
-          User: { 
-            id: artworkFromParams.artistId,
+          artist: { 
+            id: work.artistId,  // ← Use work here
             username: 'unknown',
-            displayName: 'Unknown Artist'
+            displayName: 'Unknown Artist',
+            roles: [],
+            joinedDate: new Date(),
+            uploadedArtworks: [],
+            colorizedVersions: [],
+            likedArtworks: []
           }
         });
       }
@@ -139,7 +144,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     }
   };
 
-  if (!artworkFromParams) {
+  if (!work) {  // ← Change from !artworkFromParams to !work
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Work not found</Text>
@@ -156,7 +161,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     );
   }
 
-  const { work, originalWork, collaborations, artist } = workContext;
+  const { work: currentWork, originalWork, collaborations, artist } = workContext;
 
   return (
     <KeyboardAvoidingView 
@@ -173,7 +178,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       <ScrollView style={styles.scrollView}>
         {/* Work Image */}
         <Image 
-          source={{ uri: work.assetUrl }} 
+          source={{ uri: currentWork.assetUrl }} 
           style={styles.workImage}
           resizeMode="contain"
         />
@@ -183,10 +188,10 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           <Text style={styles.title}>{work.title}</Text>
           
           <TouchableOpacity 
-            onPress={() => navigation.navigate('Profile', { userId: user.id })}
+            onPress={() => navigation.navigate('Profile', { userId: artist.id })}
           >
             <Text style={[styles.artist, styles.clickableArtist]}>
-              by {artist.display_name}
+              by {artist?.displayName}
             </Text>
           </TouchableOpacity>
           
@@ -209,7 +214,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
             <View style={styles.collaborationChain}>
               <Text style={styles.chainTitle}>Inspired by:</Text>
               <TouchableOpacity 
-                onPress={() => navigation.navigate('ArtworkDetail', { artwork: originalWork })}
+                onPress={() => navigation.navigate('ArtworkDetail', { work: originalWork })}
               >
                 <Text style={styles.chainLink}>{originalWork.title}</Text>
               </TouchableOpacity>
@@ -230,25 +235,26 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
 
           {/* Action Buttons */}
           <View style={styles.actions}>
-            {mediaUtils.isColorable(work) && (
-              <TouchableOpacity 
-              style={styles.button}
-              onPress={() => {
-                console.log('🎨 Color This button pressed');
-                console.log('📦 Artwork data:', work);
-                console.log('🆔 Artwork ID:', work.id);
-                console.log('📱 Navigation object:', navigation);
+            {/* {mediaUtils.isColorable(work) && (
+              // <TouchableOpacity 
+              // style={styles.button}
+              // onPress={() => {
+              //   console.log('🎨 Color This button pressed');
+              //   console.log('📦 Artwork data:', work);
+              //   console.log('🆔 Artwork ID:', work.id);
+              //   console.log('📱 Navigation object:', navigation);
                 
-                // Test if navigation works at all
-                navigation.navigate('SkiaColoring', { 
-                  imageUrl: work.assetUrl,
-                  title: work.title 
-                });
-              }}
-              >
-                <Text style={styles.buttonText}>🎨 Color This</Text>
-              </TouchableOpacity>
-            )}
+              //   // Test if navigation works at all
+              //   navigation.navigate('SkiaColoring', { 
+              //     imageUrl: currentWork.assetUrl,
+              //     title: currentWork.title 
+              //   });
+              // }}
+              // >
+              //   <Text style={styles.buttonText}>🎨 Color This</Text>
+              // </TouchableOpacity>
+            )
+            } */}
             
             {/* Future: Add other collaboration buttons based on media type */}
             <TouchableOpacity 

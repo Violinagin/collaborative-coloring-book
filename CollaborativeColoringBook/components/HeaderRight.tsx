@@ -6,7 +6,15 @@ import { useAuth } from '../context/AuthContext';
 
 const HeaderRight = () => {
   const navigation = useNavigation() as any;
-  const { user } = useAuth();
+  const { user, session, loading } = useAuth();
+
+  // ADD THIS DEBUG LOG
+  console.log('🔍 HeaderRight Auth State:', { 
+    user: user?.username || 'null', 
+    session: session ? 'exists' : 'null',
+    loading 
+  });
+
 
   const handleUploadPress = () => {
     if (!user) {

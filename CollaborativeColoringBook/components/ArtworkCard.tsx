@@ -37,7 +37,7 @@ export const ArtworkCard = memo<ArtworkCardProps>(({
     if (onPress) {
       onPress(artwork);
     } else {
-      navigation.navigate('ArtworkDetail', { artwork });
+      navigation.navigate('ArtworkDetail', { work });
     }
   };
 
