@@ -1,9 +1,8 @@
 // context/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
-import { User } from '../types/core';
-import { storeAuthSession } from '../services/authService';
-import { userService } from '..services/userService';
+//import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+//import { supabase } from '../lib/supabase';
+//import { User } from '../types/core';
+//import { storeAuthSession } from '../services/authService';
 
 type AuthContextType = {
   user: User | null;
