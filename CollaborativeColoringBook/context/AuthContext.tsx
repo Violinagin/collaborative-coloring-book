@@ -1,8 +1,11 @@
-// context/AuthContext.tsx
+// context/AuthContext.tsx - TEMPORARY MINIMAL VERSION
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
-import { User } from '../types/User';
-import { directSupabaseService } from '../services/directSupabaseService';
+import { User } from '../types/core';
+
+// ❌ TEMPORARILY REMOVE ALL SERVICE IMPORTS
+// import { userService } from '../services/userService';
+// import { storeAuthSession } from '../services/authService';
 
 type AuthContextType = {
   user: User | null;
@@ -25,12 +28,73 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const updateUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await loadUserProfile(session.user.id);
+  // ✅ SIMPLIFIED loadUserProfile - no services
+  const loadUserProfile = async (userId: string) => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Direct Supabase call - no services
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data) {
+        // Create basic user
+        const fallbackUser: User = {
+          id: userId,
+          username: `user_${userId.slice(0, 8)}`,
+          displayName: 'User',
+          avatarUrl: '👤',
+          bio: 'Welcome!',
+          roles: ['supporter'],
+          joinedDate: new Date(),
+          uploadedArtworks: [],
+          colorizedVersions: [],
+          likedArtworks: [],
+        };
+        setUser(fallbackUser);
+      } else {
+        // Transform manually
+        const userProfile: User = {
+          id: data.id,
+          username: data.username,
+          displayName: data.display_name,
+          avatarUrl: data.avatar_url,
+          bio: data.bio,
+          roles: data.roles,
+          joinedDate: new Date(data.created_at),
+          uploadedArtworks: [],
+          colorizedVersions: [],
+          likedArtworks: [],
+        };
+        setUser(userProfile);
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      const fallbackUser: User = {
+        id: userId,
+        username: `user_${userId.slice(0, 8)}`,
+        displayName: 'New User',
+        avatarUrl: '👤',
+        bio: 'Welcome!',
+        roles: ['supporter'],
+        joinedDate: new Date(),
+        uploadedArtworks: [],
+        colorizedVersions: [],
+        likedArtworks: [],
+      };
+      setUser(fallbackUser);
+    } finally {
+      setLoading(false);
     }
   };
+
+  // ... rest of your AuthContext methods (simplified without service calls)
 
   useEffect(() => {
     // Get initial session
@@ -57,108 +121,46 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadUserProfile = async (userId: string) => {
-    
-    if (!userId) {
-      console.error('❌ AuthContext: Cannot load user profile: empty user ID');
-      setLoading(false);
-      return;
-    }
-  
-    try {
-
-      const userProfile = await directSupabaseService.getUser(userId);
-      setUser(userProfile);
-    } catch (error) {
-      console.error('❌ AuthContext: Error loading user profile:', error);
-      // Even if there's an error, create a basic user object to prevent crashes
-      const fallbackUser: User = {
-        id: userId,
-        username: `user_${userId.slice(0, 8)}`,
-        displayName: 'New User',
-        avatarUrl: '👤',
-        bio: 'Welcome!',
-        roles: ['supporter'],
-        joinedDate: new Date(),
-        uploadedArtworks: [],
-        colorizedVersions: [],
-        likedArtworks: [],
-        recentActivity: [],
-      };
-      setUser(fallbackUser);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-
   const signUp = async (email: string, password: string, username: string, displayName: string) => {
+    // Simplified without services
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          username,
-          display_name: displayName,
-        },
-      },
+      options: { data: { username, display_name: displayName } },
     });
 
-    console.log('Supabase auth response:', { data, error });
-
-    if (error) {
-      console.error('Sign up error:', error);
-      throw error;
-    }
+    if (error) throw error;
     
-    // User profile will be created automatically by our trigger
     if (data.user) {
-      // Wait a moment for the trigger to create the profile, then load it
       setTimeout(() => {
         loadUserProfile(data.user!.id);
-      }, 2000); // Increased delay to ensure trigger has time
-      } else {
-      console.log('No user object in response');
-      }
-    };
+      }, 2000);
+    }
+  };
 
-  async function signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
     if (data.user) {
       await loadUserProfile(data.user.id);
     }
-  }
+  };
 
   const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('❌ Sign out error:', error);
-        throw error;
-      }
-      // The auth state change listener will handle setting user to null
-    } catch (error) {
-      console.error('❌ Sign out failed:', error);
-      throw error;
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  };
+
+  const updateUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadUserProfile(session.user.id);
     }
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      session,
-      loading,
-      signUp,
-      signIn,
-      signOut,
-      updateUser,
-    }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

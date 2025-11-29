@@ -11,4 +11,7 @@ const config = getDefaultConfig(__dirname);
 
 config.maxWorkers = 2;
 
+config.resolver.assetExts.push('png', 'jpg', 'jpeg');
+config.resolver.sourceExts.push('js', 'jsx', 'ts', 'tsx', 'json');
+
 module.exports = config;

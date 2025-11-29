@@ -4,121 +4,158 @@ import {
   View, 
   StyleSheet, 
   Dimensions, 
-  Alert, 
   TouchableWithoutFeedback, 
   Text,
   GestureResponderEvent,
+  ActivityIndicator,
 } from 'react-native';
-import { Canvas, Image, useImage, type SkImage } from '@shopify/react-native-skia';
+import { Skia } from '@shopify/react-native-skia';
+import { Canvas, Image, useImage } from '@shopify/react-native-skia';
 import { skiaFloodFillService } from '../services/skiaFloodFillService';
 import { ColorPicker } from '../components/ColorPicker';
-
+import { AlertModal } from '../components/AlertModal'; // Import your AlertModal
 import { RootStackParamList } from '../types/navigation';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Coloring'>;  
+type Props = NativeStackScreenProps<RootStackParamList, 'SkiaColoring'>;  
+// Add this at the top of your component
+console.log('🔍 Skia module available:', !!Skia);
+console.log('🔍 Skia Image factory available:', !!Skia?.Image);
+console.log('🔍 MakeImageFromEncoded available:', !!Skia?.Image?.MakeImageFromEncoded);
 
+// Also check what methods are available on Skia.Image
+if (Skia?.Image) {
+  console.log('🔍 Skia.Image methods:', Object.keys(Skia.Image));
+}
+// Also check the specific factory
+console.log('🔍 MakeImageFromEncoded available:', !!Skia?.Image?.MakeImageFromEncoded);
 const { width: screenWidth } = Dimensions.get('window');
 
 export const SkiaColoringScreen: React.FC<Props> = ({ route }) => {
-    const { imageUrl } = route.params;
-  const [currentImage, setCurrentImage] = useState<SkImage | null>(null);
-  const [selectedColor, setSelectedColor] = useState('#FF6B6B');
-  const [isLoading, setIsLoading] = useState(false);
-  const [canvasLayout, setCanvasLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const { imageUrl, title } = route.params;
 
-  // Load the initial image
-  const initialImage = useImage(imageUrl);
+  console.log('🔍 DEBUG - Full imageUrl:', imageUrl);
+  console.log('🔍 DEBUG - Image extension:', imageUrl?.split('.').pop());
 
-  // Set the current image when initial image loads
   React.useEffect(() => {
-    if (initialImage && !currentImage) {
-      setCurrentImage(initialImage);
-    }
-  }, [initialImage, currentImage]);
+    const testImageLoad = async () => {
+      try {
+        console.log('🔍 Testing image fetch...');
+        const response = await fetch(imageUrl);
+        console.log('🔍 Fetch response status:', response.status);
+        console.log('🔍 Fetch response ok:', response.ok);
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          console.log('🔍 Image blob size:', blob.size);
+          console.log('🔍 Image blob type:', blob.type);
+        } else {
+          console.error('🔍 Fetch failed with status:', response.status);
+        }
+      } catch (error) {
+        console.error('🔍 Fetch error:', error);
+      }
+    };
 
+    if (imageUrl) {
+      testImageLoad();
+    }
+  }, [imageUrl]);
+  
+  // Simplified state - only what we actually need
+  const [selectedColor, setSelectedColor] = useState('#FF6B6B');
+  const [isFilling, setIsFilling] = useState(false);
+  const [canvasLayout, setCanvasLayout] = useState({ width: 0, height: 0 });
+  
+  // Alert modal state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+
+  // Load image - this handles the loading state for us
+  const image = useImage(imageUrl, (error) => {
+    console.error('❌ Failed to load image:', error);
+    showAlert('Error', 'Failed to load image. Please try again.');
+  });
+
+  // Helper function to show alerts
+  const showAlert = useCallback((title: string, message: string) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  }, []);
+
+  // Handle canvas press for flood fill
   const handleCanvasPress = useCallback(
     async (event: GestureResponderEvent) => {
-      if (isLoading || !currentImage) return;
+      if (isFilling || !image) return;
 
-      setIsLoading(true);
+      setIsFilling(true);
 
       try {
         const { locationX, locationY } = event.nativeEvent;
-        console.log('🖌️ Canvas pressed at:', locationX, locationY);
         
         // Convert touch coordinates to image coordinates
-        const imageX = Math.floor((locationX / canvasLayout.width) * currentImage.width());
-        const imageY = Math.floor((locationY / canvasLayout.height) * currentImage.height());
+        const imageX = Math.floor((locationX / canvasLayout.width) * image.width());
+        const imageY = Math.floor((locationY / canvasLayout.height) * image.height());
         
-        console.log('🎯 Image coordinates:', imageX, imageY);
+        console.log('🎯 Flood fill at:', { imageX, imageY, color: selectedColor });
         
-        const result = await skiaFloodFillService.floodFillImage(
-          currentImage,
-          { x: imageX, y: imageY },
-          selectedColor
-        );
-
-        if (result.success) {
-          setCurrentImage(result.image);
-          Alert.alert('Colored!', `Filled ${result.filledPixels} pixels`);
-        }
+        // TODO: Implement your flood fill logic here
+        // const result = await skiaFloodFillService.floodFillImage(...);
+        
+        // For now, just show a success message
+        showAlert('Flood Fill', `Would fill at (${imageX}, ${imageY}) with ${selectedColor}`);
+        
       } catch (error) {
         console.error('Flood fill failed:', error);
-        Alert.alert('Error', 'Could not fill this area. Try a different spot.');
+        showAlert('Error', 'Could not fill this area. Try a different spot.');
       } finally {
-        setIsLoading(false);
+        setIsFilling(false);
       }
     },
-    [currentImage, selectedColor, isLoading, canvasLayout]
+    [image, selectedColor, isFilling, canvasLayout, showAlert]
   );
 
-  const handleColorSelect = (color: string) => {
-    setSelectedColor(color);
-    console.log('🎨 Selected color:', color);
-  };
+  // Track canvas dimensions
+  const handleCanvasLayout = useCallback((event: any) => {
+    const { width, height } = event.nativeEvent.layout;
+    setCanvasLayout({ width, height });
+  }, []);
 
-  const handleCanvasLayout = (event: any) => {
-    const { x, y, width, height } = event.nativeEvent.layout;
-    setCanvasLayout({ x, y, width, height });
-    console.log('📐 Canvas layout:', { x, y, width, height });
-  };
-
-  if (!currentImage) {
+  // Loading state
+  if (!image) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text>Loading image...</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#0000ff" />
+          <Text style={styles.loadingText}>Loading coloring page...</Text>
+          {title && <Text style={styles.title}>{title}</Text>}
         </View>
       </View>
     );
   }
 
-  // Calculate image dimensions for display
-  const imageWidth = currentImage.width();
-  const imageHeight = currentImage.height();
-  const aspectRatio = imageWidth / imageHeight;
-  const displayWidth = Math.min(screenWidth - 40, imageWidth);
+  // Calculate display dimensions
+  const aspectRatio = image.width() / image.height();
+  const displayWidth = Math.min(screenWidth - 40, image.width());
   const displayHeight = displayWidth / aspectRatio;
 
   return (
     <View style={styles.container}>
+      {/* Color Picker */}
       <ColorPicker 
-        onColorSelect={handleColorSelect} 
-        selectedColor={selectedColor} 
+        selectedColor={selectedColor}
+        onColorSelect={setSelectedColor}
       />
       
+      {/* Canvas Area */}
       <View style={styles.canvasContainer}>
         <TouchableWithoutFeedback onPress={handleCanvasPress}>
           <View onLayout={handleCanvasLayout}>
-            <Canvas 
-              style={[
-                styles.canvas, 
-                { width: displayWidth, height: displayHeight }
-              ]}
-            >
+            <Canvas style={{ width: displayWidth, height: displayHeight }}>
               <Image
-                image={currentImage}
+                image={image}
                 x={0}
                 y={0}
                 width={displayWidth}
@@ -129,21 +166,29 @@ export const SkiaColoringScreen: React.FC<Props> = ({ route }) => {
           </View>
         </TouchableWithoutFeedback>
         
-        {isLoading && (
+        {/* Loading overlay during flood fill */}
+        {isFilling && (
           <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="small" color="#0000ff" />
             <Text>Coloring...</Text>
           </View>
         )}
       </View>
 
+      {/* Instructions */}
       <View style={styles.instructions}>
         <Text style={styles.instructionText}>
           🎨 Tap anywhere to fill with {selectedColor}
         </Text>
-        <Text style={styles.instructionText}>
-          ⚠️ Avoid tapping on black lines
-        </Text>
       </View>
+
+      {/* Alert Modal */}
+      <AlertModal
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onClose={() => setAlertVisible(false)}
+      />
     </View>
   );
 };
@@ -153,25 +198,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  title: {
+    marginTop: 5,
+    fontSize: 14,
+    color: '#666',
+  },
   canvasContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-  },
-  canvas: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -181,14 +226,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   instructions: {
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
   },
   instructionText: {
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 4,
   },
 });
+
 export default SkiaColoringScreen;

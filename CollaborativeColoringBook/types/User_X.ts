@@ -64,3 +64,17 @@ export interface Activity {
     text: string;
     createdAt: Date;
   }
+
+  export const transformDatabaseUser = (dbUser: any): User => ({
+    id: dbUser.id,
+    username: dbUser.username,
+    displayName: dbUser.display_name,  // Map from database
+    avatarUrl: dbUser.avatar_url,      // Map from database
+    bio: dbUser.bio,
+    roles: dbUser.roles || ['supporter'],
+    joinedDate: new Date(dbUser.joined_date),
+    uploadedArtworks: dbUser.uploaded_artworks || [],
+    colorizedVersions: dbUser.colorized_versions || [],
+    likedArtworks: dbUser.liked_artworks || [],
+    recentActivity: dbUser.recent_activity || []
+  });

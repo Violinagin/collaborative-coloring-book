@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { User, UserRole, Artwork } from '../types/User';
+import { User, UserRole, CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
-import { directSupabaseService } from '../services/directSupabaseService';
 import { supabase } from '../lib/supabase';
 import RemoteSVG from '../components/RemoteSVG';
+import { worksService } from '../services/worksService'; 
+import { socialService } from '../services/socialService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -25,7 +26,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [activeTab, setActiveTab] = useState<'lineArt' | 'colorWork' | 'activity'>('lineArt');
   const { user: currentUser, signOut } = useAuth();
   const [profileUser, setProfileUser] = useState<User | null>(null);
-  const [userLineArt, setUserLineArt] = useState<Artwork[]>([]);
+  const [userLineArt, setUserLineArt] = useState<CreativeWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -33,7 +34,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
-  const [userColorWork, setUserColorWork] = useState<Artwork[]>([]);
+  const [userColorWork, setUserColorWork] = useState<CreativeWork[]>([]);
 
   // Get the user ID from navigation params
   const { userId } = route.params;
@@ -54,26 +55,40 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       setLoadFailed(false);
       
       // Load user data
-      const userData = await directSupabaseService.getUser(userId);
+      // ✅ CHANGED: Create basic user for now (we'll build proper userService later)
+      const userData: User = {
+        id: userId,
+        username: `user_${userId.slice(0, 8)}`,
+        displayName: 'User',
+        avatarUrl: '👤',
+        bio: 'Welcome to the coloring community!',
+        roles: ['supporter'],
+        joinedDate: new Date(),
+        uploadedArtworks: [],
+        colorizedVersions: [],
+        likedArtworks: [],
+      };
       setProfileUser(userData);
       
       // Load artworks
-      const artworks = await directSupabaseService.getArtworks();
+      const artworks = await worksService.getWorksWithSocialData();
       const userArtworks = artworks.filter(artwork => artwork.artistId === userId);
       setUserLineArt(userArtworks);
       // Load user's colorizations
-      const userColorizations = await directSupabaseService.getUserColorizations(userId);
+      const userColorizations = artworks.filter(artwork => 
+        artwork.artistId === userId && artwork.originalWorkId // Works that are derivatives
+      );
       setUserColorWork(userColorizations);
 
-      if (currentUser && currentUser.id !== userId) {
-        const followingStatus = await directSupabaseService.isFollowing(currentUser.id, userId);
-        setIsFollowing(followingStatus);
-      }
+       if (currentUser && currentUser.id !== userId) {}
+      //   const followingStatus = await directSupabaseService.isFollowing(currentUser.id, userId);
+      //   setIsFollowing(followingStatus);
+      // }
 
-      const followers = await directSupabaseService.getFollowerCount(userId);
-      const following = await directSupabaseService.getFollowingCount(userId);
-      setFollowerCount(followers);
-      setFollowingCount(following);
+      // const followers = await directSupabaseService.getFollowerCount(userId);
+      // const following = await directSupabaseService.getFollowingCount(userId);
+      // setFollowerCount(followers);
+      // setFollowingCount(following);
       
     } catch (error) {
       console.error('💥 Error loading user profile:', error);
@@ -119,24 +134,22 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   
     setFollowLoading(true);
     try {
+      // ✅ CHANGED: Use socialService for follow operations
       if (isFollowing) {
         // Unfollow
-        await directSupabaseService.unfollowUser(currentUser.id, profileUser.id);
+        await socialService.unfollowUser(currentUser.id, profileUser.id);
         setIsFollowing(false);
         setFollowerCount(prev => Math.max(0, prev - 1)); // Optimistic update
       } else {
         // Follow
-        await directSupabaseService.followUser(currentUser.id, profileUser.id);
+        await socialService.followUser(currentUser.id, profileUser.id);
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1); // Optimistic update
       }
     } catch (error) {
       console.error('❌ Error toggling follow:', error);
+      // TODO: Revert with actual data from socialService
       // Revert optimistic update on error
-      const actualFollowers = await directSupabaseService.getFollowerCount(profileUser.id);
-      setFollowerCount(actualFollowers);
-      const actualFollowingStatus = await directSupabaseService.isFollowing(currentUser.id, profileUser.id);
-      setIsFollowing(actualFollowingStatus);
     } finally {
       setFollowLoading(false);
     }
@@ -356,15 +369,15 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       <FlatList
         data={userLineArt}
         numColumns={2}
-        renderItem={({ item }: { item: Artwork }) => (
+        renderItem={({ item }: { item: CreativeWork }) => (
           <TouchableOpacity 
             style={styles.artworkItem}
             onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
           >
-            <Image source={{ uri: item.lineArtUrl }} style={styles.artworkImage} />
+            <Image source={{ uri: item.assetUrl }} style={styles.artworkImage} />
           </TouchableOpacity>
         )}
-        keyExtractor={(item: Artwork) => item.id}
+        keyExtractor={(item: CreativeWork) => item.id}
         contentContainerStyle={styles.galleryGrid}
       />
     );
@@ -373,7 +386,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const renderColorWorkTab = () => {
   userColorWork.forEach((item, index) => {
     
-    if (item.lineArtUrl) {
+    if (item.assetUrl) {
 
     } else {
       console.log('❌ NO URL FOUND');
@@ -405,7 +418,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     <FlatList
       data={userColorWork}
       numColumns={2}
-      renderItem={({ item }: { item: Artwork }) => {
+      renderItem={({ item }: { item: CreativeWork }) => {
   
         return (
           <TouchableOpacity 
@@ -413,8 +426,8 @@ const ProfileScreen = ({ route, navigation }: Props) => {
             onPress={() => navigation.navigate('ArtworkDetail', { artwork: item })}
           >
              <RemoteSVG 
-              uri={item.lineArtUrl}
-              lineArtUrl={item.originalLineArtUrl}
+              uri={item.assetUrl}
+              lineArtUrl={item.originalWorkId}
               width={150}
               height={150}
               style={styles.artworkItem}
@@ -428,16 +441,16 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       {item.title.replace(' (Colored)', '')}
     </Text>
             <Text style={styles.artworkTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.originalArtist}>Original by {item.artist}</Text>
+            <Text style={styles.originalArtist}>Original by {item.artist?.displayName || 'Unknown Artist'}</Text>
             
             {/* Debug info */}
             <Text style={styles.debugText} numberOfLines={1}>
-              {item.lineArtUrl ? 'Has URL' : 'No URL'}
+              {item.assetUrl ? 'Has URL' : 'No URL'}
             </Text>
           </TouchableOpacity>
         );
       }}
-      keyExtractor={(item: Artwork) => item.id}
+      keyExtractor={(item: CreativeWork) => item.id}
       contentContainerStyle={styles.galleryGrid}
     />
   );

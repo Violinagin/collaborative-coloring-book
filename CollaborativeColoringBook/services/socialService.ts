@@ -103,5 +103,133 @@ export const socialService = {
       text: data.text,
       createdAt: new Date(data.created_at)
     };
+  },
+
+  // Follow/Unfollow methods
+  async followUser(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('follows')
+        .insert({
+          follower_id: followerId,
+          following_id: followingId
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error following user:', error);
+      throw error;
+    }
+  },
+
+  async unfollowUser(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error unfollowing user:', error);
+      throw error;
+    }
+  },
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        throw error;
+      }
+      
+      return !!data; // Returns true if follow relationship exists
+    } catch (error) {
+      console.error('Error checking follow status:', error);
+      return false;
+    }
+  },
+  async getFollowerCount(userId: string): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', userId); // People who follow this user
+
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      console.error('Error getting follower count:', error);
+      return 0;
+    }
+  },
+
+  async getFollowingCount(userId: string): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', userId); // People this user follows
+
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      console.error('Error getting following count:', error);
+      return 0;
+    }
+  },
+  // Bonus: Get follower and following lists
+  async getFollowers(userId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', userId);
+
+      if (error) throw error;
+      return data.map(item => item.follower_id);
+    } catch (error) {
+      console.error('Error getting followers:', error);
+      return [];
+    }
+  },
+
+  async getFollowing(userId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId);
+
+      if (error) throw error;
+      return data.map(item => item.following_id);
+    } catch (error) {
+      console.error('Error getting following:', error);
+      return [];
+    }
+  },
+
+  // Bonus: Get mutual follows
+  async getMutualFollows(userId1: string, userId2: string): Promise<boolean> {
+    try {
+      const [user1FollowsUser2, user2FollowsUser1] = await Promise.all([
+        this.isFollowing(userId1, userId2),
+        this.isFollowing(userId2, userId1)
+      ]);
+      
+      return user1FollowsUser2 && user2FollowsUser1;
+    } catch (error) {
+      console.error('Error checking mutual follows:', error);
+      return false;
+    }
   }
 };

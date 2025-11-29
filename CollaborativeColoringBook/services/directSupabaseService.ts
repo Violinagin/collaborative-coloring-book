@@ -1,5 +1,5 @@
 // services/directSupabaseService.ts - FIXED AUTHENTICATION
-import { Artwork, User, Comment } from '../types/User';
+import { CreativeWork, User, Comment } from '../types/core';
 import { supabase } from '../lib/supabase';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -168,10 +168,10 @@ export const directSupabaseService = {
     };
   },
 
-  async getArtworks(): Promise<Artwork[]> {
+  async getArtworks(): Promise<CreativeWork[]> {
       try {
         
-        const url = `${supabaseUrl}/rest/v1/artworks?select=*,users!artworks_artist_id_fkey(display_name)`;
+        const url = `${supabaseUrl}/rest/v1/works?select=*,users!works_artist_id_fkey(display_name)`;
         
         const response = await fetch(url, {
           headers: {
@@ -281,7 +281,7 @@ export const directSupabaseService = {
       }
     },
 
-  async getUserColorizations(userId: string): Promise<Artwork[]> {
+  async getUserColorizations(userId: string): Promise<CreativeWork[]> {
     try {
       
       // Get colorized versions by this user

@@ -9,6 +9,9 @@ import {
   ActivityIndicator,
   RefreshControl 
 } from 'react-native';
+import { LoadingState } from '../components/LoadingState';
+import { ErrorState } from '../components/ErrorState';
+import { EmptyState } from '../components/EmptyState';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
@@ -217,7 +220,7 @@ const GalleryScreen = ({ navigation }: Props) => {
             {mediaUtils.isColorable(item) && (
               <TouchableOpacity 
                 style={styles.colorButton}
-                onPress={() => navigation.navigate('Coloring', { artwork: item })}
+                onPress={() => navigation.navigate('SkiaColoring', { work: item })}
               >
                 <Text style={styles.colorButtonText}>🎨 Color</Text>
               </TouchableOpacity>

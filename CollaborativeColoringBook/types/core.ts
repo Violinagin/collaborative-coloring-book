@@ -18,12 +18,21 @@ export type CollaborationType =
   | 'sequel'          
   | 'remix';          
 
-  export interface Artist {
+  export interface User {
     id: string;
     username: string;
-    display_name: string;  // Database field name
-    avatar_url?: string;   // Database field name
+    displayName: string;
+    avatarUrl?: string;
     bio?: string;
+    roles: UserRole[];
+    joinedDate: Date;
+    // Content
+    uploadedArtworks: string[]; // artwork IDs
+    colorizedVersions: string[]; // colorized version IDs
+    likedArtworks: string[]; // artwork IDs
+  
+    // Activity
+    //recentActivity: Activity[];
   }
 
 // Media-specific configurations
@@ -39,7 +48,7 @@ export interface LineArtConfig {
 }
 
 export interface ColoredArtConfig {
-  isColorable: boolean;
+  isColorable: true;
   originalLineArtId?: string;
   complexity: 'simple' | 'medium' | 'complex';
   technique: 'flat' | 'gradient' | 'textured';
@@ -53,24 +62,30 @@ export interface DigitalArtConfig {
 }
 
 export interface WritingConfig {
+  isColorable: false;
   wordCount: number;
   genre: string[];
   readingTime?: number;
 }
 
 export interface MusicConfig {
+  isColorable: false;
   duration: number;
   genre: string[];
   bpm?: number;
 }
 
 export interface AnimationConfig {
+  isColorable: false;
   duration: number;
   frameRate: number;
   technique: '2d' | '3d' | 'stop_motion';
 }
 
 export type MediaConfig = LineArtConfig | ColoredArtConfig | DigitalArtConfig | WritingConfig | MusicConfig | AnimationConfig;
+
+export type UserRole = 'line_artist' | 'colorist' | 'supporter';
+
 
 // Main work interface
 export type CreativeWork = {
@@ -86,6 +101,10 @@ export type CreativeWork = {
   visibility: 'public' | 'private' | 'unlisted';
   createdAt: Date;
   updatedAt: Date;
+  likes?: Like[];
+  comments?: Comment[];
+  userHasLiked?: boolean;
+  artist?: User;
 } & (
   | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
   | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
@@ -126,7 +145,24 @@ export interface WorkWithContext {
     work: CreativeWork;
     originalWork?: CreativeWork;
     collaborations: Collaboration[];
-    artist: Artist;
+    artist?: User;
+}
+
+export interface Like {
+  id: string;
+  workId: string;
+  userId: string;
+  createdAt: Date;
+  user?: User;
+}
+
+export interface Comment {
+  id: string;
+  workId: string;
+  userId: string;
+  content: string;  // Note: Your socialService uses 'text', database uses 'text'
+  createdAt: Date;
+  user?: User;
 }
 
 export const isLineArtConfig = (config: MediaConfig): config is LineArtConfig => {

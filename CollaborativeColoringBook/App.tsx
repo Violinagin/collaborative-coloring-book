@@ -6,13 +6,15 @@ import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
 import { RootStackParamList } from './types/navigation';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProfileScreen from './screens/ProfileScreen';
-import ColoringScreen from './screens/ColoringScreen';
+//import ColoringScreen from './screens/ColoringScreen';
 import UploadScreen from './screens/UploadScreen';
 import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import { View, Text } from 'react-native';
 import SkiaColoringScreen from './screens/SkiaColoringScreen';
+import ErrorBoundary from './components/ErrorBoundary';
+import { Skia } from '@shopify/react-native-skia';
 
 
 // Create the navigator with your specific types
@@ -63,7 +65,7 @@ function Navigation() {
               options={{ title: 'Upload Line Art' }}
             />
             <Stack.Screen 
-              name="Coloring" 
+              name="SkiaColoring" 
               component={SkiaColoringScreen}
               options={{ title: 'Color This Artwork' }}
             />
@@ -88,8 +90,10 @@ function Navigation() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Navigation />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Navigation />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

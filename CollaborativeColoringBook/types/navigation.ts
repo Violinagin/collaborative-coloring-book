@@ -1,11 +1,14 @@
 import { CreativeWork } from './core'; 
-import { User } from './User';
 
 export type RootStackParamList = {
   Gallery: undefined;  
   ArtworkDetail: { artwork: CreativeWork };
   Profile: { userId: string }; 
-  Coloring: { artwork: CreativeWork };
+//  Coloring: { artwork: CreativeWork };
+  SkiaColoring: { 
+    imageUrl: string;
+    title?: string;
+  };
   Upload: undefined;
   Auth: undefined;
   EditProfile: undefined;

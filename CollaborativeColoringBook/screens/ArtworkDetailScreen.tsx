@@ -38,6 +38,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
+  
 
   const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setModalTitle(title);
@@ -82,10 +83,10 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
         setWorkContext({
           work: artworkFromParams,
           collaborations: [],
-          artist: { 
+          User: { 
             id: artworkFromParams.artistId,
             username: 'unknown',
-            display_name: 'Unknown Artist'
+            displayName: 'Unknown Artist'
           }
         });
       }
@@ -182,7 +183,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           <Text style={styles.title}>{work.title}</Text>
           
           <TouchableOpacity 
-            onPress={() => navigation.navigate('Profile', { userId: artist.id })}
+            onPress={() => navigation.navigate('Profile', { userId: user.id })}
           >
             <Text style={[styles.artist, styles.clickableArtist]}>
               by {artist.display_name}
@@ -239,7 +240,10 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
                 console.log('📱 Navigation object:', navigation);
                 
                 // Test if navigation works at all
-                navigation.navigate('Coloring', { artwork: work });
+                navigation.navigate('SkiaColoring', { 
+                  imageUrl: work.assetUrl,
+                  title: work.title 
+                });
               }}
               >
                 <Text style={styles.buttonText}>🎨 Color This</Text>

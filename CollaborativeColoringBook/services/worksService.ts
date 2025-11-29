@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { CreativeWork, Collaboration, WorkWithContext, MediaType, MediaConfig, Artist, CreateWorkParams } from '../types/core';
+import { CreativeWork, Collaboration, WorkWithContext, MediaType, MediaConfig, User, CreateWorkParams } from '../types/core';
 
 export const worksService = {
   async createWork(workData: CreateWorkParams): Promise<CreativeWork> {
@@ -34,13 +34,13 @@ export const worksService = {
       .single();
 
       console.log('📦 Database response:', data);
-  console.log('🆔 Database work ID:', data?.id);
+      console.log('🆔 Database work ID:', data?.id);
     
     if (error) throw error;
     const transformed = this.transformDatabaseWork(data);
   console.log('🔄 Transformed work:', transformed);
   console.log('🆔 Transformed work ID:', transformed.id);
-    return this.transformDatabaseWork(data);
+    return transformed;
     
   },
   
@@ -79,7 +79,7 @@ export const worksService = {
       work: this.transformDatabaseWork(workData),
       originalWork,
       collaborations: workData.collaborations || [],
-      artist: workData.artist
+      artist: this.transformDatabaseUser(workData.artist)
     };
   },
   
@@ -115,13 +115,84 @@ export const worksService = {
     };
   },
 
-  transformDatabaseArtist(dbArtist: any): Artist {
+  transformDatabaseUser(dbArtist: any): User | undefined {
+    if (!dbArtist) return undefined;
+
     return {
       id: dbArtist.id,
       username: dbArtist.username,
-      display_name: dbArtist.display_name, // Keep database naming
-      avatar_url: dbArtist.avatar_url,
-      bio: dbArtist.bio
+      displayName: dbArtist.display_name, // ✅ Use frontend naming
+      avatarUrl: dbArtist.avatar_url,     // ✅ Use frontend naming
+      bio: dbArtist.bio || '',
+      roles: dbArtist.roles || ['supporter'],
+      joinedDate: new Date(dbArtist.joined_date || Date.now()),
+      uploadedArtworks: dbArtist.uploaded_artworks || [],
+      colorizedVersions: dbArtist.colorized_versions || [],
+      likedArtworks: dbArtist.liked_artworks || []
+    };
+  },
+
+  async getWorksWithSocialData(): Promise<CreativeWork[]> {
+    const { data: userData } = await supabase.auth.getUser();
+    const currentUserId = userData.user?.id;
+    
+    const { data, error } = await supabase
+      .from('works')
+      .select(`
+        *,
+        artist:users(
+          id,
+          username,
+          display_name,
+          avatar_url,
+          bio,
+          roles,
+          joined_date
+        ),
+        likes:likes(
+          id,
+          user_id,
+          created_at,
+          user:users(id, username, display_name)
+        ),
+        comments:comments(
+          id,
+          user_id,
+          content,
+          created_at,
+          user:users(id, username, display_name)
+        )
+      `)
+      .eq('visibility', 'public')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return data.map(dbWork => this.transformDatabaseWorkWithSocial(dbWork, currentUserId));
+  },
+
+  transformDatabaseWorkWithSocial(dbWork: any, currentUserId?: string): CreativeWork {
+    const baseWork = this.transformDatabaseWork(dbWork);
+    
+    return {
+      ...baseWork,
+      artist: this.transformDatabaseUser(dbWork.artist), // ✅ Use the transformer
+      likes: dbWork.likes?.map((like: any) => ({
+        id: like.id,
+        workId: dbWork.id,
+        userId: like.user_id,
+        createdAt: new Date(like.created_at),
+        user: this.transformDatabaseUser(like.user) // ✅ Use the transformer
+      })) || [],
+      comments: dbWork.comments?.map((comment: any) => ({
+        id: comment.id,
+        workId: dbWork.id,
+        userId: comment.user_id,
+        content: comment.content,
+        createdAt: new Date(comment.created_at),
+        user: this.transformDatabaseUser(comment.user) // ✅ Use the transformer
+      })) || [],
+      userHasLiked: dbWork.likes?.some((like: any) => like.user_id === currentUserId) || false
     };
   }
 };

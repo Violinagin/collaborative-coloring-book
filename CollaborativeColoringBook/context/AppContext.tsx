@@ -1,15 +1,15 @@
 // context/AppContext.tsx - CLEANED VERSION
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
-import { Artwork, User } from '../types/User';
+import { CreativeWork, User } from '../types/core';
 
 type AppState = {
-  artworks: Artwork[];
+  artworks: CreativeWork[];
   users: User[];
   currentUser: User | null; // Changed to null since we might not have a user
 };
 
 type AppAction = 
-  | { type: 'ADD_ARTWORK'; payload: Artwork }
+  | { type: 'ADD_ARTWORK'; payload: CreativeWork }
   | { type: 'TOGGLE_LIKE'; payload: { artworkId: string; userId: string } }
   | { type: 'ADD_COMMENT'; payload: { artworkId: string; comment: any } };
 
@@ -31,12 +31,17 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
           ...state,
           artworks: state.artworks.map(artwork => {
             if (artwork.id === action.payload.artworkId) {
-              const isLiked = artwork.likes.includes(action.payload.userId);
+              const isLiked = artwork.likes?.some(like => like.userId === action.payload.userId) || false;
               return {
                 ...artwork,
                 likes: isLiked 
-                  ? artwork.likes.filter(id => id !== action.payload.userId)
-                  : [...artwork.likes, action.payload.userId]
+                  ? artwork.likes?.filter(like => like.userId !== action.payload.userId) || []
+                  : [...(artwork.likes || []), { 
+                      id: `like-${Date.now()}`, 
+                      workId: artwork.id, 
+                      userId: action.payload.userId, 
+                      createdAt: new Date() 
+                    }]
               };
             }
             return artwork;
@@ -50,7 +55,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             if (artwork.id === action.payload.artworkId) {
               return {
                 ...artwork,
-                comments: [...artwork.comments, action.payload.comment]
+                comments: [...(artwork.comments || []), action.payload.comment]
               };
             }
             return artwork;
@@ -66,7 +71,6 @@ type AppProviderProps = {
   children: ReactNode;
 };  
 
-// ✅ UNCOMMENT AND UPDATE THIS - No more mock data!
 export const AppProvider = ({ children }: AppProviderProps) => {
   const [state, dispatch] = useReducer(appReducer, {
     artworks: [], // Start with empty array - real data will be loaded

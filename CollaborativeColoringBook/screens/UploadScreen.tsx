@@ -1,4 +1,4 @@
-// screens/UploadScreen.tsx - NEW VERSION
+// screens/UploadScreen.tsx - PROPERLY UPDATED VERSION
 import React, { useState } from 'react';
 import { 
   View, 
@@ -12,9 +12,59 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { worksService } from '../services/worksService';
 import { useAuth } from '../context/AuthContext';
-import { MediaType } from '../types/core';
+import { MediaType, CreateWorkParams } from '../types/core';
 import { AlertModal } from '../components/AlertModal';
-import { directSupabaseService } from '../services/directSupabaseService';
+import { storageService } from '../services/storageService';
+
+// Helper function to create properly typed work parameters
+const createWorkParams = (
+  mediaType: MediaType,
+  title: string,
+  description: string,
+  assetUrl: string
+): CreateWorkParams => {
+  const baseParams = {
+    title: title.trim(),
+    description: description.trim(),
+    assetUrl,
+    tags: [],
+    visibility: 'public' as const
+  };
+
+  switch (mediaType) {
+    case 'line_art':
+      return {
+        ...baseParams,
+        mediaType: 'line_art',
+        mediaConfig: {
+          isColorable: true,
+          complexity: 'medium'
+        }
+      };
+      
+    case 'colored_art':
+      return {
+        ...baseParams,
+        mediaType: 'colored_art', 
+        mediaConfig: {
+          isColorable: true,
+          technique: 'flat',
+          complexity: 'medium'
+        }
+      };
+      
+    case 'digital_art':
+    default:
+      return {
+        ...baseParams,
+        mediaType: 'digital_art',
+        mediaConfig: {
+          isColorable: false,
+          style: 'painting'
+        }
+      };
+  }
+};
 
 const UploadScreen = () => {
   const { user } = useAuth();
@@ -40,15 +90,21 @@ const UploadScreen = () => {
   };
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      if (!result.canceled) {
+        setImageUri(result.assets[0].uri);
+        console.log('✅ Image selected:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('❌ Error picking image:', error);
+      showModal('Error', 'Failed to select image', 'error');
     }
   };
 
@@ -65,32 +121,30 @@ const UploadScreen = () => {
   
     setUploading(true);
     try {
-      console.log('🚀 Starting proper upload flow...');
+      console.log('🚀 Starting upload flow for user:', user.id);
       
-      // 1. FIRST: Upload image to Supabase Storage
+      // ✅ STEP 1: Upload image to Supabase Storage using storageService
       console.log('📤 Step 1: Uploading image to storage...');
-      const storageImageUrl = await directSupabaseService.uploadArtworkImage(
-        imageUri, 
-        user.id
-      );
+      const storageImageUrl = await storageService.uploadArtworkImage(imageUri, user.id);
       
       console.log('✅ Image uploaded to storage:', storageImageUrl);
       
-      // 2. THEN: Create work with the storage URL
+      // ✅ STEP 2: Create work record using worksService
       console.log('📝 Step 2: Creating work record...');
       
       let createWorkParams;
   
+      // Build the correct parameters based on media type
       switch (mediaType) {
         case 'line_art':
           createWorkParams = {
             title: title.trim(),
             description: description.trim(),
             mediaType: 'line_art' as const,
-            assetUrl: storageImageUrl, // ← STORAGE URL, not local URI
+            assetUrl: storageImageUrl,
             mediaConfig: {
               isColorable: true,
-              complexity: 'medium'
+              complexity: 'medium' as const
             },
             tags: [],
             visibility: 'public' as const
@@ -102,10 +156,11 @@ const UploadScreen = () => {
             title: title.trim(),
             description: description.trim(),
             mediaType: 'colored_art' as const,
-            assetUrl: storageImageUrl, // ← STORAGE URL, not local URI
+            assetUrl: storageImageUrl,
             mediaConfig: {
               isColorable: true,
-              technique: 'flat'
+              technique: 'flat' as const,
+              complexity: 'medium'
             },
             tags: [],
             visibility: 'public' as const
@@ -118,10 +173,10 @@ const UploadScreen = () => {
             title: title.trim(),
             description: description.trim(),
             mediaType: 'digital_art' as const,
-            assetUrl: storageImageUrl, // ← STORAGE URL, not local URI
+            assetUrl: storageImageUrl,
             mediaConfig: {
               isColorable: false,
-              style: 'painting'
+              style: 'painting' as const
             },
             tags: [],
             visibility: 'public' as const
@@ -129,24 +184,28 @@ const UploadScreen = () => {
           break;
       }
   
-      console.log('📦 Work data:', createWorkParams);
-      const work = await worksService.createWork(createWorkParams as any);
+      console.log('📦 Work data being created:', createWorkParams);
+      
+      // ✅ Use worksService to create the work record
+      const work = await worksService.createWork(createWorkParams);
       
       console.log('🎉 Work created successfully!');
       console.log('🆔 Work ID:', work.id);
-      console.log('🖼️ Work image URL:', work.assetUrl);
+      console.log('🖼️ Work assetUrl:', work.assetUrl);
+      console.log('📊 Work mediaType:', work.mediaType);
   
-      showModal('Success', 'Your work has been uploaded!', 'success');
+      showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
       
-      // Reset form
+      // Reset form on success
       setTitle('');
       setDescription('');
       setImageUri(null);
       setMediaType('line_art');
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('💥 Upload failed:', error);
-      showModal('Error', 'Failed to upload work', 'error');
+      const errorMessage = error?.message || 'Please try again.';
+      showModal('Upload Failed', `Failed to upload artwork: ${errorMessage}`, 'error');
     } finally {
       setUploading(false);
     }
@@ -156,7 +215,6 @@ const UploadScreen = () => {
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Upload Creative Work</Text>
       
-      {/* Media Type Selection */}
       <AlertModal
         visible={modalVisible}
         title={modalTitle}
@@ -164,8 +222,13 @@ const UploadScreen = () => {
         type={modalType}
         onClose={hideModal}
       />
+      
+      {/* Media Type Selection */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Media Type</Text>
+        <Text style={styles.sectionDescription}>
+          Choose the type of artwork you're uploading
+        </Text>
         <View style={styles.mediaTypeGrid}>
           {(['line_art', 'colored_art', 'digital_art'] as MediaType[]).map(type => (
             <TouchableOpacity
@@ -184,6 +247,11 @@ const UploadScreen = () => {
                  type === 'colored_art' ? '🌈 Colored Art' :
                  '✨ Digital Art'}
               </Text>
+              <Text style={styles.mediaTypeDescription}>
+                {type === 'line_art' ? 'Others can color this' :
+                 type === 'colored_art' ? 'Already colored artwork' :
+                 'Finished digital artwork'}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -192,11 +260,20 @@ const UploadScreen = () => {
       {/* Image Upload */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Work Image</Text>
+        <Text style={styles.sectionDescription}>
+          Select a high-quality image of your artwork
+        </Text>
         <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
           {imageUri ? (
-            <Text style={styles.imagePickerText}>Image Selected ✓</Text>
+            <View style={styles.imageSelected}>
+              <Text style={styles.imagePickerText}>✓ Image Selected</Text>
+              <Text style={styles.imagePickerSubtext}>Tap to change</Text>
+            </View>
           ) : (
-            <Text style={styles.imagePickerText}>Tap to select image</Text>
+            <View style={styles.imageNotSelected}>
+              <Text style={styles.imagePickerText}>📷 Tap to Select Image</Text>
+              <Text style={styles.imagePickerSubtext}>PNG, JPG, or WebP</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -206,17 +283,19 @@ const UploadScreen = () => {
         <Text style={styles.sectionTitle}>Work Details</Text>
         <TextInput
           style={styles.input}
-          placeholder="Work title"
+          placeholder="Give your artwork a title..."
           value={title}
           onChangeText={setTitle}
+          maxLength={100}
         />
         <TextInput
           style={[styles.input, styles.textArea]}
-          placeholder="Description (optional)"
+          placeholder="Describe your artwork (optional)..."
           value={description}
           onChangeText={setDescription}
           multiline
           numberOfLines={3}
+          maxLength={500}
         />
       </View>
 
@@ -230,14 +309,25 @@ const UploadScreen = () => {
         disabled={!title.trim() || !imageUri || uploading}
       >
         {uploading ? (
-          <ActivityIndicator color="white" />
+          <View style={styles.uploadingContainer}>
+            <ActivityIndicator color="white" size="small" />
+            <Text style={styles.uploadButtonText}>Uploading...</Text>
+          </View>
         ) : (
           <Text style={styles.uploadButtonText}>
-            Upload {mediaType === 'line_art' ? 'Line Art' : 
+            🚀 Upload {mediaType === 'line_art' ? 'Line Art' : 
                    mediaType === 'colored_art' ? 'Colored Art' : 'Digital Art'}
           </Text>
         )}
       </TouchableOpacity>
+
+      {/* Upload Tips */}
+      <View style={styles.tipsSection}>
+        <Text style={styles.tipsTitle}>💡 Upload Tips</Text>
+        <Text style={styles.tip}>• Use square images for best results</Text>
+        <Text style={styles.tip}>• High-quality PNG works best for coloring</Text>
+        <Text style={styles.tip}>• Add descriptive titles to help others find your work</Text>
+      </View>
     </ScrollView>
   );
 };
@@ -253,14 +343,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 24,
     textAlign: 'center',
+    color: '#333',
   },
   section: {
     marginBottom: 24,
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 4,
+    color: '#333',
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
   },
   mediaTypeGrid: {
     flexDirection: 'row',
@@ -284,9 +389,15 @@ const styles = StyleSheet.create({
   mediaTypeText: {
     fontSize: 14,
     fontWeight: '500',
+    marginBottom: 4,
   },
   mediaTypeTextSelected: {
     color: '#007AFF',
+  },
+  mediaTypeDescription: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
   },
   imagePicker: {
     backgroundColor: 'white',
@@ -297,9 +408,21 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderStyle: 'dashed',
   },
+  imageSelected: {
+    alignItems: 'center',
+  },
+  imageNotSelected: {
+    alignItems: 'center',
+  },
   imagePickerText: {
     fontSize: 16,
     color: '#666',
+    fontWeight: '500',
+  },
+  imagePickerSubtext: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
   },
   input: {
     backgroundColor: 'white',
@@ -308,6 +431,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     marginBottom: 12,
+    fontSize: 16,
   },
   textArea: {
     height: 80,
@@ -319,14 +443,39 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8,
+    marginBottom: 24,
   },
   uploadButtonDisabled: {
     backgroundColor: '#ccc',
+  },
+  uploadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   uploadButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  tipsSection: {
+    backgroundColor: '#e7f3ff',
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#007AFF',
+  },
+  tip: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 20,
   },
 });
 
