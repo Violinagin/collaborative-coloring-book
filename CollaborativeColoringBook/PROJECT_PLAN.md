@@ -48,10 +48,18 @@ COLLABORATIVECOLORINGBOOK/
 │       └── need
 ├── components/
 │   └── AlertModal.tsx
+│   └── ArtworkCard.tsx
 │   └── CommentButton.tsx
+│   └── ColorPalette.tsx
+│   └── ColorPicker.tsx
+│   └── CommentButton.tsx
+│   └── EmptyState.tsx
+│   └── ErrorBoundary.tsx
+│   └── ErrorState.tsx
 │   └── HeaderRight.tsx
 │   └── LikeButton.tsx
 │   └── LineArtBackground.tsx
+│   └── LoadingState.tsx
 │   └── RemoteSVG.tsx
 ├── context/
 │   └── AppContext.tsx
@@ -66,15 +74,6 @@ COLLABORATIVECOLORINGBOOK/
 │       └── signIn,
 │       └── signOut,
 │       └── updateUser,
-│   └── CommentsContext.tsx
-│       └── return
-│           └── artworks,
-│           └── addComment,
-│           └── getComments,
-│           └── getCommentCount,
-│       └── export
-│           └── useComments
-│   └── LikesContext.tsx
 ├── data/
 ├── hooks/
 ├── lib/
@@ -86,9 +85,12 @@ COLLABORATIVECOLORINGBOOK/
 │   └── EditProfileScreen.tsx
 │   └── GalleryScreen.tsx
 │   └── ProfileScreen.tsx
+│   └── SkiaColoringScreen.tsx
 │   └── UploadScreen.tsx
 ├── services/
-│   └── directSupabaseService.ts
+│   └── authService.ts
+│   └── stoargeService.ts
+│   └── userService.ts
 │   └── worksService.ts
 │   └── socialService.ts
 ├── types/
