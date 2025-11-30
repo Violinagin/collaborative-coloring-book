@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { 
   View, 
   Text, 
+  Image,
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
@@ -16,56 +17,6 @@ import { MediaType, CreateWorkParams } from '../types/core';
 import { AlertModal } from '../components/AlertModal';
 import { storageService } from '../services/storageService';
 
-// Helper function to create properly typed work parameters
-const createWorkParams = (
-  mediaType: MediaType,
-  title: string,
-  description: string,
-  assetUrl: string
-): CreateWorkParams => {
-  const baseParams = {
-    title: title.trim(),
-    description: description.trim(),
-    assetUrl,
-    tags: [],
-    visibility: 'public' as const
-  };
-
-  switch (mediaType) {
-    case 'line_art':
-      return {
-        ...baseParams,
-        mediaType: 'line_art',
-        mediaConfig: {
-          isColorable: true,
-          complexity: 'medium'
-        }
-      };
-      
-    case 'colored_art':
-      return {
-        ...baseParams,
-        mediaType: 'colored_art', 
-        mediaConfig: {
-          isColorable: true,
-          technique: 'flat',
-          complexity: 'medium'
-        }
-      };
-      
-    case 'digital_art':
-    default:
-      return {
-        ...baseParams,
-        mediaType: 'digital_art',
-        mediaConfig: {
-          isColorable: false,
-          style: 'painting'
-        }
-      };
-  }
-};
-
 const UploadScreen = () => {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
@@ -73,6 +24,8 @@ const UploadScreen = () => {
   const [mediaType, setMediaType] = useState<MediaType>('line_art');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
@@ -95,76 +48,112 @@ const UploadScreen = () => {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: .8,
       });
 
       if (!result.canceled) {
-        setImageUri(result.assets[0].uri);
-        console.log('✅ Image selected:', result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('❌ Error picking image:', error);
-      showModal('Error', 'Failed to select image', 'error');
+        const selectedUri = result.assets[0].uri;
+      setImageUri(selectedUri);
+      console.log('✅ Image selected:', selectedUri);
     }
+  } catch (error) {
+    console.error('❌ Error picking image:', error);
+    showModal('Error', 'Failed to select image. Please try again.', 'error');
+  }
+};
+
+  // Form validation
+  const validateForm = (): string | null => {
+    if (!title.trim()) {
+      return 'Please enter a title for your artwork';
+    }
+    
+    if (title.trim().length < 2) {
+      return 'Title must be at least 2 characters long';
+    }
+    
+    if (title.trim().length > 100) {
+      return 'Title must be less than 100 characters';
+    }
+    
+    if (description.trim().length > 500) {
+      return 'Description must be less than 500 characters';
+    }
+    
+    if (!imageUri) {
+      return 'Please select an image';
+    }
+    
+    return null; // No errors
   };
+
 
   const handleUpload = async () => {
     if (!user) {
       showModal('Error', 'Please log in to upload works', 'error');
       return;
     }
-  
-    if (!title.trim() || !imageUri) {
-      showModal('Error', 'Please add a title and image', 'error');
-      return;
-    }
+     // Validate form
+     const validationError = validateForm();
+     if (validationError) {
+       showModal('Validation Error', validationError, 'error');
+       return;
+     }
   
     setUploading(true);
+    setShowProgress(true);
+    setUploadProgress(0);
+
     try {
       console.log('🚀 Starting upload flow for user:', user.id);
       
-      // ✅ STEP 1: Upload image to Supabase Storage using storageService
+      // Upload with Progress
       console.log('📤 Step 1: Uploading image to storage...');
-      const storageImageUrl = await storageService.uploadArtworkImage(imageUri, user.id);
+      const storageImageUrl = await storageService.uploadArtworkImage(
+        imageUri!, 
+        user.id,
+        (progress) => {
+          setUploadProgress(progress);
+        }
+      );
       
       console.log('✅ Image uploaded to storage:', storageImageUrl);
       
-      // ✅ STEP 2: Create work record using worksService
-      console.log('📝 Step 2: Creating work record...');
+      // Create work record
+      console.log('📝 Creating work record...');
       
-      let createWorkParams;
-  
-      // Build the correct parameters based on media type
+      let createWorkParams: CreateWorkParams;
+
       switch (mediaType) {
         case 'line_art':
           createWorkParams = {
             title: title.trim(),
             description: description.trim(),
-            mediaType: 'line_art' as const,
+            mediaType: 'line_art',
             assetUrl: storageImageUrl,
             mediaConfig: {
               isColorable: true,
-              complexity: 'medium' as const
+              complexity: 'medium'
             },
             tags: [],
-            visibility: 'public' as const
-          };
+            visibility: 'public'
+          } as CreateWorkParams;
           break;
           
         case 'colored_art':
           createWorkParams = {
             title: title.trim(),
             description: description.trim(),
-            mediaType: 'colored_art' as const,
+            mediaType: 'colored_art',
             assetUrl: storageImageUrl,
             mediaConfig: {
               isColorable: true,
-              technique: 'flat' as const,
+              technique: 'flat',
               complexity: 'medium'
             },
             tags: [],
-            visibility: 'public' as const
-          };
+            visibility: 'public'
+          } as CreateWorkParams;
           break;
           
         case 'digital_art':
@@ -172,28 +161,22 @@ const UploadScreen = () => {
           createWorkParams = {
             title: title.trim(),
             description: description.trim(),
-            mediaType: 'digital_art' as const,
+            mediaType: 'digital_art',
             assetUrl: storageImageUrl,
             mediaConfig: {
               isColorable: false,
-              style: 'painting' as const
+              style: 'painting'
             },
             tags: [],
-            visibility: 'public' as const
-          };
+            visibility: 'public'
+          } as CreateWorkParams;
           break;
       }
-  
-      console.log('📦 Work data being created:', createWorkParams);
-      
-      // ✅ Use worksService to create the work record
+
       const work = await worksService.createWork(createWorkParams);
       
-      console.log('🎉 Work created successfully!');
-      console.log('🆔 Work ID:', work.id);
-      console.log('🖼️ Work assetUrl:', work.assetUrl);
-      console.log('📊 Work mediaType:', work.mediaType);
-  
+      console.log('🎉 Work created successfully! ID:', work.id);
+
       showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
       
       // Reset form on success
@@ -208,6 +191,8 @@ const UploadScreen = () => {
       showModal('Upload Failed', `Failed to upload artwork: ${errorMessage}`, 'error');
     } finally {
       setUploading(false);
+      setShowProgress(false);
+      setUploadProgress(0);
     }
   };
 
@@ -222,6 +207,24 @@ const UploadScreen = () => {
         type={modalType}
         onClose={hideModal}
       />
+
+       {/* Progress Bar */}
+       {showProgress && (
+        <View style={styles.progressSection}>
+          <Text style={styles.progressText}>
+            {uploadProgress < 100 ? 'Uploading...' : 'Processing...'}
+          </Text>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill,
+                { width: `${uploadProgress}%` }
+              ]} 
+            />
+          </View>
+          <Text style={styles.progressPercentage}>{uploadProgress}%</Text>
+        </View>
+      )}
       
       {/* Media Type Selection */}
       <View style={styles.section}>
@@ -264,18 +267,25 @@ const UploadScreen = () => {
           Select a high-quality image of your artwork
         </Text>
         <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-          {imageUri ? (
-            <View style={styles.imageSelected}>
-              <Text style={styles.imagePickerText}>✓ Image Selected</Text>
-              <Text style={styles.imagePickerSubtext}>Tap to change</Text>
-            </View>
-          ) : (
-            <View style={styles.imageNotSelected}>
-              <Text style={styles.imagePickerText}>📷 Tap to Select Image</Text>
-              <Text style={styles.imagePickerSubtext}>PNG, JPG, or WebP</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+  {imageUri ? (
+    <View style={styles.imagePreviewContainer}>
+      <Image 
+        source={{ uri: imageUri }} 
+        style={styles.imagePreview}
+        resizeMode="cover"
+      />
+      <View style={styles.imageOverlay}>
+        <Text style={styles.imagePickerText}>✓ Image Selected</Text>
+        <Text style={styles.imagePickerSubtext}>Tap to change</Text>
+      </View>
+    </View>
+  ) : (
+    <View style={styles.imageNotSelected}>
+      <Text style={styles.imagePickerText}>📷 Tap to Select Image</Text>
+      <Text style={styles.imagePickerSubtext}>PNG, JPG, or WebP</Text>
+    </View>
+  )}
+</TouchableOpacity>
       </View>
 
       {/* Work Details */}
@@ -476,6 +486,60 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
     lineHeight: 20,
+  },
+  imagePreviewContainer: {
+    width: '100%',
+    height: 200,
+    position: 'relative',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 8,
+    alignItems: 'center',
+  },
+  progressSection: {
+    marginBottom: 16,
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  progressText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  progressPercentage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
 

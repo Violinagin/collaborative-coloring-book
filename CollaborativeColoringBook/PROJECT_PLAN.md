@@ -121,8 +121,8 @@ COLLABORATIVECOLORINGBOOK/
 ✅ Image upload for orginal art (or refactor image upload to handle both)
 🔲 Image Card Component
 🔲 Image Thumbnail Component
-🔲 Start using components and hooks
-🔲 Fix Alerts to Modal Component(have component, just need to impliment)
+✅ Start using components and hooks
+✅ Fix Alerts to Modal Component(have component, just need to impliment)
 🔲 Ability to Delete and Edit own images
 🔲 Basic coloring tool
 ✅ User profiles
