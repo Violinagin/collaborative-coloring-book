@@ -126,17 +126,39 @@ export const socialService = {
   // Follow/Unfollow methods
   async followUser(followerId: string, followingId: string): Promise<boolean> {
     try {
-      const { error } = await supabase
+      console.log('👥 Attempting to follow:', { followerId, followingId });
+      
+      // First, check if already following to avoid duplicate key error
+      const alreadyFollowing = await this.isFollowing(followerId, followingId);
+      if (alreadyFollowing) {
+        console.log('✅ Already following this user, no action needed');
+        return true; // Consider this a "success" since the desired state is already achieved
+      }
+  
+      const { data, error } = await supabase
         .from('follows')
         .insert({
           follower_id: followerId,
           following_id: followingId
-        });
-
-      if (error) throw error;
+        })
+        .select()
+        .single();
+  
+      if (error) {
+        console.error('❌ Follow error:', error);
+        
+        // Handle unique constraint violation gracefully
+        if (error.code === '23505') {
+          console.log('ℹ️ Already following this user (caught by constraint)');
+          return true; // Still return success since they're already following
+        }
+        throw error;
+      }
+  
+      console.log('✅ Successfully followed user:', data);
       return true;
     } catch (error) {
-      console.error('Error following user:', error);
+      console.error('❌ Error following user:', error);
       throw error;
     }
   },

@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
+import { AlertModal } from '../components/AlertModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
@@ -25,28 +25,47 @@ const AuthScreen = ({ navigation }: Props) => {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
 
+   // Alert Modal State
+   const [alertVisible, setAlertVisible] = useState(false);
+   const [alertTitle, setAlertTitle] = useState('');
+   const [alertMessage, setAlertMessage] = useState('');
+   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
+
+// Helper function to show alerts
+const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  setAlertTitle(title);
+  setAlertMessage(message);
+  setAlertType(type);
+  setAlertVisible(true);
+};
+
+// Handle modal close
+const handleAlertClose = () => {
+  setAlertVisible(false);
+};
+
   const handleAuth = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      showAlert('Error', 'Please enter email and password', 'error');
       return;
     }
 
     if (isSignUp && (!username || !displayName)) {
-      Alert.alert('Error', 'Please enter username and display name');
+      showAlert('Error', 'Please enter username and display name', 'error');
       return;
     }
 
     try {
       if (isSignUp) {
         await signUp(email, password, username, displayName);
-        Alert.alert('Success', 'Account created! You can now sign in.');
+        showAlert('Success', 'Account created! You can now sign in.', 'success');
         setIsSignUp(false); // Switch to sign in after successful registration
       } else {
         await signIn(email, password);
         // Navigation will happen automatically due to auth state change
       }
     } catch (error: any) {
-      Alert.alert('Authentication Error', error.message);
+      showAlert('Authentication Error', error.message, 'error');
     }
   };
 
@@ -137,6 +156,14 @@ const AuthScreen = ({ navigation }: Props) => {
           </View>
         </View>
       </ScrollView>
+       {/* Alert Modal */}
+    <AlertModal
+      visible={alertVisible}
+      title={alertTitle}
+      message={alertMessage}
+      type={alertType}
+      onClose={handleAlertClose}
+    />
     </KeyboardAvoidingView>
   );
 };

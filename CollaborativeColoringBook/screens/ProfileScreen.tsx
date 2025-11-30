@@ -9,16 +9,15 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
-  Alert
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { User, UserRole, CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import RemoteSVG from '../components/RemoteSVG';
 import { worksService } from '../services/worksService'; 
 import { socialService } from '../services/socialService';
+import { AlertModal } from '../components/AlertModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -35,6 +34,21 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [followingCount, setFollowingCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
   const [userColorWork, setUserColorWork] = useState<CreativeWork[]>([]);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertType(type);
+    setAlertVisible(true);
+  };
+
+  const handleAlertClose = () => {
+    setAlertVisible(false);
+  };
 
   // Get the user ID from navigation params
   const { userId } = route.params;
@@ -79,25 +93,40 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         artwork.artistId === userId && artwork.originalWorkId // Works that are derivatives
       );
       setUserColorWork(userColorizations);
+      console.log('👥 Loading follower data...');
+       if (currentUser && currentUser.id !== userId) {
+        console.log('🔍 Checking if current user follows profile user...');
+         const followingStatus = await socialService.isFollowing(currentUser.id, userId);
+         setIsFollowing(followingStatus);
+         console.log('✅ Follow status:', followingStatus);
+        } else {
+          console.log('ℹ️ Own profile or no current user, skipping follow check');
+        }
+    
+        // Load follower counts
+        console.log('📊 Loading follower counts...');
+        const [followers, following] = await Promise.all([
+          socialService.getFollowerCount(userId),
+          socialService.getFollowingCount(userId)
+        ]);
+        
+        setFollowerCount(followers);
+        setFollowingCount(following);
+        
+        console.log('✅ Profile loaded successfully:', {
+          followers,
+          following,
+          isFollowing: isFollowing
+        });
+        
+      } catch (error) {
+        console.error('💥 Error loading user profile:', error);
+        setLoadFailed(true);
+      } finally {
+        setLoading(false);
+      }
+    }, [userId, currentUser]);
 
-       if (currentUser && currentUser.id !== userId) {}
-      //   const followingStatus = await directSupabaseService.isFollowing(currentUser.id, userId);
-      //   setIsFollowing(followingStatus);
-      // }
-
-      // const followers = await directSupabaseService.getFollowerCount(userId);
-      // const following = await directSupabaseService.getFollowingCount(userId);
-      // setFollowerCount(followers);
-      // setFollowingCount(following);
-      
-    } catch (error) {
-      console.error('💥 Error loading user profile:', error);
-      // Only set failed if we're still supposed to be loading
-      setLoadFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, currentUser]);
 
   // Load user profile data with proper cleanup
   useEffect(() => {
@@ -115,14 +144,23 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       }
     }, 15000); // 15 second timeout
 
-    loadUserProfile();
+    // Add focus listener
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('🔄 Profile screen focused, refreshing data...');
+      // Reload the latest follower data
+      loadUserProfile();
+    });
+    loadUserProfile(); 
 
     return () => {
       isMounted = false;
       clearTimeout(loadTimeout);
+      unsubscribe();
     };
-  }, [userId, loadUserProfile, navigation]); // Added proper dependencies
+  }, [userId, loadUserProfile, navigation]);
 
+
+  
   // Handle Follow Actions
   const handleFollowToggle = async () => {
     if (!currentUser) {
@@ -133,27 +171,61 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     if (!profileUser) return;
   
     setFollowLoading(true);
-    try {
-      // ✅ CHANGED: Use socialService for follow operations
-      if (isFollowing) {
-        // Unfollow
-        await socialService.unfollowUser(currentUser.id, profileUser.id);
+  try {
+    console.log('👥 Toggling follow:', { 
+      currentUser: currentUser.id, 
+      profileUser: profileUser.id,
+      currentlyFollowing: isFollowing 
+    });
+    
+    if (isFollowing) {
+      // Unfollow
+      console.log('🔄 Unfollowing user...');
+      const success = await socialService.unfollowUser(currentUser.id, profileUser.id);
+      if (success) {
         setIsFollowing(false);
-        setFollowerCount(prev => Math.max(0, prev - 1)); // Optimistic update
-      } else {
-        // Follow
-        await socialService.followUser(currentUser.id, profileUser.id);
-        setIsFollowing(true);
-        setFollowerCount(prev => prev + 1); // Optimistic update
+        setFollowerCount(prev => Math.max(0, prev - 1));
+        console.log('✅ Successfully unfollowed user');
       }
-    } catch (error) {
-      console.error('❌ Error toggling follow:', error);
-      // TODO: Revert with actual data from socialService
-      // Revert optimistic update on error
-    } finally {
-      setFollowLoading(false);
+    } else {
+      // Follow
+      console.log('🔄 Following user...');
+      const success = await socialService.followUser(currentUser.id, profileUser.id);
+      if (success) {
+        setIsFollowing(true);
+        setFollowerCount(prev => prev + 1);
+        console.log('✅ Successfully followed user');
+      }
     }
-  };
+  } catch (error: any) {
+    console.error('❌ Error toggling follow:', error);
+    
+    // Handle the unique constraint error gracefully
+    if (error.code === '23505') {
+      console.log('ℹ️ Already following, updating UI state');
+      setIsFollowing(true);
+      // Refresh the actual count to be safe
+      const actualCount = await socialService.getFollowerCount(profileUser.id);
+      setFollowerCount(actualCount);
+    } else {
+      showAlert('Error', 'Failed to update follow status. Please try again.');
+      
+      // Only revert for non-duplicate errors
+      try {
+        console.log('🔄 Reverting optimistic update due to error');
+        const currentStatus = await socialService.isFollowing(currentUser.id, profileUser.id);
+        setIsFollowing(currentStatus);
+        
+        const actualCount = await socialService.getFollowerCount(profileUser.id);
+        setFollowerCount(actualCount);
+      } catch (revertError) {
+        console.error('❌ Error reverting optimistic update:', revertError);
+      }
+    }
+  } finally {
+    setFollowLoading(false);
+  }
+};
 
   // Handle logout
   const handleLogoutPress = () => {
@@ -168,7 +240,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       navigation.replace('Gallery');
     } catch (error: any) {
       console.error('❌ Logout error:', error);
-      Alert.alert('Logout Failed', error?.message || 'Please try again.');
+      showAlert('Logout Failed', error?.message || 'Please try again.', 'error');
     }
   };
   
@@ -545,6 +617,16 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         {activeTab === 'activity' && renderActivityTab()}
       </View>
     </ScrollView>
+
+    {/* Alert Modal */}
+    <AlertModal
+      visible={alertVisible}
+      title={alertTitle}
+      message={alertMessage}
+      type={alertType}
+      onClose={handleAlertClose}
+    />
+
     {showLogoutModal && (
   <View style={styles.modalOverlay}>
     <View style={styles.modalContent}>

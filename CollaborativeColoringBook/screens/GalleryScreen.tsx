@@ -45,7 +45,7 @@ const GalleryScreen = ({ navigation }: Props) => {
         const [likeCount, workComments, isLiked] = await Promise.all([
           socialService.getLikeCount(work.id),        
           socialService.getComments(work.id),         
-          user ? socialService.isLiked(work.id, user.id) : false
+          user ? socialService.isLiked(work.id) : false
         ]);
         
         return { 

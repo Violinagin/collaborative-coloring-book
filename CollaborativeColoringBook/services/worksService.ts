@@ -199,7 +199,7 @@ export const worksService = {
           avatar_url,
           bio,
           roles,
-          joined_date
+          created_at
         ),
         likes:likes(
           id,
@@ -210,7 +210,7 @@ export const worksService = {
         comments:comments(
           id,
           user_id,
-          content,
+          text,
           created_at,
           user:users(id, username, display_name)
         )
@@ -240,7 +240,7 @@ export const worksService = {
         id: comment.id,
         workId: dbWork.id,
         userId: comment.user_id,
-        content: comment.content,
+        text: comment.text,
         createdAt: new Date(comment.created_at),
         user: this.transformDatabaseUser(comment.user) // ✅ Use the transformer
       })) || [],
