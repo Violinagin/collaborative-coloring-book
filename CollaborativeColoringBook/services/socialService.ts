@@ -123,6 +123,21 @@ export const socialService = {
     };
   },
 
+  async deleteComment(commentId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('id', commentId)
+      .eq('user_id', user.id); // Users can only delete their own comments
+
+    if (error) throw error;
+
+    console.log('✅ Comment deleted:', commentId);
+  },
+
   // Follow/Unfollow methods
   async followUser(followerId: string, followingId: string): Promise<boolean> {
     try {

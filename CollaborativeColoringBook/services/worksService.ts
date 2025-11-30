@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { CreativeWork, Collaboration, WorkWithContext, MediaType, MediaConfig, User, CreateWorkParams } from '../types/core';
+import { storageService } from '../services/storageService'
 
 export const worksService = {
   async createWork(workData: CreateWorkParams): Promise<CreativeWork> {
@@ -246,5 +247,36 @@ export const worksService = {
       })) || [],
       userHasLiked: dbWork.likes?.some((like: any) => like.user_id === currentUserId) || false
     };
-  }
+  },
+  async deleteWork(workId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // First, get the work to verify ownership and get the asset URL
+    const work = await this.getWork(workId);
+    
+    // Check if the current user is the artist
+    if (work.artistId !== user.id) {
+      throw new Error('You can only delete your own artworks');
+    }
+
+    // Delete the work from database
+    const { error: workError } = await supabase
+      .from('works')
+      .delete()
+      .eq('id', workId)
+      .eq('artist_id', user.id); // Double-check ownership
+
+    if (workError) throw workError;
+
+    // Delete the associated image from storage
+    try {
+      await storageService.deleteArtworkImage(work.assetUrl);
+    } catch (storageError) {
+      console.warn('⚠️ Could not delete image from storage:', storageError);
+      // Continue even if storage deletion fails
+    }
+
+    console.log('✅ Work deleted successfully:', workId);
+  },
 };

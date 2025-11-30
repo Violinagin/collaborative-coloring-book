@@ -1,4 +1,4 @@
-// screens/ArtworkDetailScreen.tsx - UPDATED VERSION
+// screens/ArtworkDetailScreen.tsx
 import React, {useState, useEffect} from 'react';
 import { 
   View, 
@@ -20,12 +20,13 @@ import { socialService } from '../services/socialService';
 import LikeButton from '../components/LikeButton';
 import { useAuth } from '../context/AuthContext';
 import { mediaUtils } from '../utils/mediaUtils';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 import { AlertModal } from '../components/AlertModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
-  const { user } = useAuth();
+  const { user: currentUser } = useAuth();
   const { work } = route.params;
   const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,9 +39,15 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
+  const [showDeleteArtworkModal, setShowDeleteArtworkModal] = useState(false);
+  const [deletingArtwork, setDeletingArtwork] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   
+const isOwner = currentUser?.id === work?.artistId;
 
-  const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setModalTitle(title);
     setModalMessage(message);
     setModalType(type);
@@ -49,6 +56,17 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
 
   const hideModal = () => {
     setModalVisible(false);
+  };
+
+  // Load comments function
+  const loadComments = async () => {
+    if (!work) return;
+    try {
+      const workComments = await socialService.getComments(work.id);
+      setComments(workComments);
+    } catch (error) {
+      console.error('Error loading comments:', error);
+    }
   };
 
   useEffect(() => {
@@ -69,7 +87,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       const [likeCount, workComments, liked] = await Promise.all([
         socialService.getLikeCount(workId),
         socialService.getComments(workId),
-        user ? socialService.isLiked(workId) : false
+        currentUser ? socialService.isLiked(workId) : false
       ]);
       
       setRealLikeCount(likeCount);
@@ -81,10 +99,10 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       // Fallback to basic work data
       if (work) {  // ← Change from artworkFromParams to work
         setWorkContext({
-          work: work,  // ← Use work here
+          work: work,  
           collaborations: [],
           artist: { 
-            id: work.artistId,  // ← Use work here
+            id: work.artistId,  
             username: 'unknown',
             displayName: 'Unknown Artist',
             roles: [],
@@ -105,10 +123,10 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     console.log('💬 handleAddComment called with:', {
       newComment: newComment, // What's actually in the input?
       workId: workContext?.work.id,
-      userId: user?.id
+      userId: currentUser?.id
     });
 
-    if (!user || !workContext) return;
+    if (!currentUser || !workContext) return;
     
     if (!newComment.trim()) return;
     
@@ -117,16 +135,44 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       const newCommentObj = await socialService.addComment(workContext.work.id, newComment.trim());
       setComments(prev => [...prev, newCommentObj]);
       setNewComment('');
+      showAlert('Success', 'Comment added successfully', 'success');
     } catch (error) {
       console.error('Error adding comment:', error);
-      showModal('Error', 'Failed to add comment', 'error');
+      showAlert('Error', 'Failed to add comment', 'error');
     } finally {
       setSubmittingComment(false);
     }
   };
 
+  const handleDeleteComment = (commentId: string) => {
+    setCommentToDelete(commentId);
+    setShowDeleteCommentModal(true);
+  };
+  
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
+    
+    setDeletingCommentId(commentToDelete);
+    try {
+      await socialService.deleteComment(commentToDelete);
+      
+      // Refresh comments
+      await loadComments();
+      
+      showAlert('Success', 'Comment deleted successfully', 'success');
+      
+    } catch (error: any) {
+      console.error('❌ Error deleting comment:', error);
+      showAlert('Error', error.message || 'Failed to delete comment', 'error');
+    } finally {
+      setDeletingCommentId(null);
+      setShowDeleteCommentModal(false);
+      setCommentToDelete(null);
+    }
+  };
+
   const handleLike = async () => {
-    if (!user || !workContext) return;
+    if (!currentUser || !workContext) return;
     
     try {
       // Optimistic update
@@ -134,7 +180,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
       setRealLikeCount(prev => userLiked ? prev - 1 : prev + 1);
 
       // Use NEW social service
-      const nowLiked = await socialService.toggleLike(workContext.work.id, user.id);
+      const nowLiked = await socialService.toggleLike(workContext.work.id, currentUser.id);
       const newLikeCount = await socialService.getLikeCount(workContext.work.id);
       
       // Update with actual database state
@@ -151,7 +197,30 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
     }
   };
 
-  if (!work) {  // ← Change from !artworkFromParams to !work
+  const handleDeleteArtwork = async () => {
+    if (!work) return;
+    
+    setDeletingArtwork(true);
+    try {
+      await worksService.deleteWork(work.id);
+      
+      showAlert('Success', 'Artwork deleted successfully', 'success');
+      
+      // Navigate back after a short delay
+      setTimeout(() => {
+        navigation.goBack();
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error('❌ Error deleting artwork:', error);
+      showAlert('Error', error.message || 'Failed to delete artwork', 'error');
+    } finally {
+      setDeletingArtwork(false);
+      setShowDeleteArtworkModal(false);
+    }
+  };
+
+  if (!work) { 
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Work not found</Text>
@@ -181,6 +250,27 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
         message={modalMessage}
         type={modalType}
         onClose={hideModal}
+      />
+      <ConfirmationModal
+        visible={showDeleteArtworkModal}
+        title="Delete Artwork"
+        message="Are you sure you want to delete this artwork? This action cannot be undone."
+        confirmText="Delete Artwork"
+        onConfirm={handleDeleteArtwork}
+        onCancel={() => setShowDeleteArtworkModal(false)}
+        type="danger"
+      />
+      <ConfirmationModal
+        visible={showDeleteCommentModal}
+        title="Delete Comment"
+        message="Are you sure you want to delete this comment? This action cannot be undone."
+        confirmText="Delete Comment"
+        onConfirm={confirmDeleteComment}
+        onCancel={() => {
+          setShowDeleteCommentModal(false);
+          setCommentToDelete(null);
+        }}
+        type="danger"
       />
       <ScrollView style={styles.scrollView}>
         {/* Work Image */}
@@ -248,7 +338,21 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
           </View>
 
           {/* Action Buttons */}
+          
           <View style={styles.actions}>
+          {isOwner && (
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={() => setShowDeleteArtworkModal(true)}
+              disabled={deletingArtwork}
+             >
+            {deletingArtwork ? (
+              <ActivityIndicator size="small" color="#ff4444" />
+            ) : (
+              <Text style={styles.deleteButtonText}>🗑️ Delete</Text>
+               )}
+            </TouchableOpacity>
+            )}
             {/* {mediaUtils.isColorable(work) && (
               // <TouchableOpacity 
               // style={styles.button}
@@ -284,22 +388,40 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
             <Text style={styles.sectionTitle}>
               Comments ({comments.length})
             </Text>
-            {comments.map(comment => (
-              <View key={comment.id} style={styles.comment}>
-                <Text style={styles.commentAuthor}>{comment.userName}:</Text>
-                <Text style={styles.commentText}>{comment.text}</Text>
-                <Text style={styles.commentDate}>
-                  {new Date(comment.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-            ))}
+            {comments.map(comment => {
+              const isCommentOwner = currentUser?.id === comment.userId;
+              return (
+                <View key={comment.id} style={styles.comment}>
+                  <View style={styles.commentHeader}>
+                    <Text style={styles.commentAuthor}>{comment.userName}</Text>
+                    <Text style={styles.commentDate}>
+                      {new Date(comment.createdAt).toLocaleDateString()}
+                    </Text>
+                    {isCommentOwner && (
+                      <TouchableOpacity 
+                        style={styles.deleteCommentButton}
+                        onPress={() => handleDeleteComment(comment.id)}
+                        disabled={deletingCommentId === comment.id}
+                      >
+                        {deletingCommentId === comment.id ? (
+                          <ActivityIndicator size="small" color="#ff4444" />
+                        ) : (
+                          <Text style={styles.deleteCommentText}>🗑️</Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={styles.commentText}>{comment.text}</Text>
+                </View>
+              );
+            })}
             {comments.length === 0 && (
               <Text style={styles.noComments}>No comments yet. Be the first!</Text>
             )}
           </View>
 
           {/* Add Comment Section */}
-          {user && (
+          {currentUser && (
             <View style={styles.addCommentSection}>
               <Text style={styles.sectionTitle}>Add a Comment</Text>
               <View style={styles.commentInputContainer}>
@@ -338,7 +460,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
               <Text style={styles.derivativeSubtitle}>
                 Other creations inspired by this work
               </Text>
-              {/* We'll build a proper derivative gallery here */}
+              {/* Future: derivative gallery */}
               </View>
           )}
         </View>
@@ -547,6 +669,40 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     padding: 20,
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#ffebee',
+    borderWidth: 1,
+    borderColor: '#ffcdd2',
+  },
+  deleteButtonText: {
+    color: '#d32f2f',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteCommentButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  deleteCommentText: {
+    color: '#d32f2f',
+    fontSize: 12,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  commentAuthor: {
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  commentDate: {
+    color: '#666',
+    fontSize: 12,
+    flex: 1,
   },
 });
 
