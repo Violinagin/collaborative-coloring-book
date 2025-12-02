@@ -123,7 +123,7 @@ COLLABORATIVECOLORINGBOOK/
 🔲 Image Thumbnail Component
 ✅ Start using components and hooks
 ✅ Fix Alerts to Modal Component(have component, just need to impliment)
-🔲 Ability to Delete and Edit own images
+✅ Ability to Delete and Edit own images
 🔲 Basic coloring tool
 ✅ User profiles
 ✅ Persistent data storage

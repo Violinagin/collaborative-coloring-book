@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { Artwork } from '../types/User';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import Svg, { Path, G } from 'react-native-svg';

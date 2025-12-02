@@ -130,6 +130,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
   // Load user profile data with proper cleanup
   useEffect(() => {
+    
     if (!userId) {
       console.log('No user ID provided, redirecting to auth');
       navigation.replace('Auth');
@@ -145,19 +146,22 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     }, 15000); // 15 second timeout
 
     // Add focus listener
+    
     const unsubscribe = navigation.addListener('focus', () => {
       console.log('🔄 Profile screen focused, refreshing data...');
       // Reload the latest follower data
-      loadUserProfile();
+      if (isMounted) {
+        console.log('🔄 Profile screen focused, refreshing data...');
+        loadUserProfile();
+      }
     });
-    loadUserProfile(); 
 
     return () => {
       isMounted = false;
       clearTimeout(loadTimeout);
       unsubscribe();
     };
-  }, [userId, loadUserProfile, navigation]);
+  }, [ loadUserProfile, navigation]);
 
 
   

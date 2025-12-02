@@ -13,7 +13,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { worksService } from '../services/worksService';
 import { useAuth } from '../context/AuthContext';
-import { MediaType, CreateWorkParams } from '../types/core';
+import { UploadableMediaType, CreativeWork, UploadWork, LineArtConfig, ColoredArtConfig, DigitalArtConfig } from '../types/core';
 import { AlertModal } from '../components/AlertModal';
 import { storageService } from '../services/storageService';
 
@@ -21,7 +21,7 @@ const UploadScreen = () => {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [mediaType, setMediaType] = useState<MediaType>('line_art');
+  const [mediaType, setMediaType] = useState<UploadableMediaType>('line_art');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -30,6 +30,60 @@ const UploadScreen = () => {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
+  
+  const createUploadWorkData = (
+    title: string,
+    description: string,
+    storageImageUrl: string,
+    mediaType: UploadableMediaType
+  ): UploadWork => {
+    const base = {
+      title: title.trim(),
+      description: description.trim(),
+      assetUrl: storageImageUrl,
+      originalWorkId: undefined as string | undefined,
+      tags: [] as string[],
+      visibility: 'public' as const,
+    };
+  
+    // Create objects with exact types first, then cast
+    if (mediaType === 'line_art') {
+      const lineArtWork = {
+        ...base,
+        mediaType: 'line_art' as const,
+        mediaConfig: {
+          isColorable: true,
+          complexity: 'medium' as const
+        }
+      };
+      // Cast to the specific union member
+      return lineArtWork as typeof lineArtWork & UploadWork;
+    }
+    
+    if (mediaType === 'colored_art') {
+      const coloredArtWork = {
+        ...base,
+        mediaType: 'colored_art' as const,
+        mediaConfig: {
+          isColorable: true,
+          technique: 'flat' as const,
+          complexity: 'medium' as const
+        }
+      };
+      return coloredArtWork as typeof coloredArtWork & UploadWork;
+    }
+    
+    // digital_art
+    const digitalArtWork = {
+      ...base,
+      mediaType: 'digital_art' as const,
+      mediaConfig: {
+        isColorable: false,
+        style: 'painting' as const
+      }
+    };
+    return digitalArtWork as typeof digitalArtWork & UploadWork;
+  };
 
   const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setModalTitle(title);
@@ -89,6 +143,7 @@ const UploadScreen = () => {
 
 
   const handleUpload = async () => {
+    
     if (!user) {
       showModal('Error', 'Please log in to upload works', 'error');
       return;
@@ -104,6 +159,8 @@ const UploadScreen = () => {
     setShowProgress(true);
     setUploadProgress(0);
 
+
+    
     try {
       console.log('🚀 Starting upload flow for user:', user.id);
       
@@ -118,65 +175,23 @@ const UploadScreen = () => {
       );
       
       console.log('✅ Image uploaded to storage:', storageImageUrl);
-      
-      // Create work record
-      console.log('📝 Creating work record...');
-      
-      let createWorkParams: CreateWorkParams;
 
-      switch (mediaType) {
-        case 'line_art':
-          createWorkParams = {
-            title: title.trim(),
-            description: description.trim(),
-            mediaType: 'line_art',
-            assetUrl: storageImageUrl,
-            mediaConfig: {
-              isColorable: true,
-              complexity: 'medium'
-            },
-            tags: [],
-            visibility: 'public'
-          } as CreateWorkParams;
-          break;
-          
-        case 'colored_art':
-          createWorkParams = {
-            title: title.trim(),
-            description: description.trim(),
-            mediaType: 'colored_art',
-            assetUrl: storageImageUrl,
-            mediaConfig: {
-              isColorable: true,
-              technique: 'flat',
-              complexity: 'medium'
-            },
-            tags: [],
-            visibility: 'public'
-          } as CreateWorkParams;
-          break;
-          
-        case 'digital_art':
-        default:
-          createWorkParams = {
-            title: title.trim(),
-            description: description.trim(),
-            mediaType: 'digital_art',
-            assetUrl: storageImageUrl,
-            mediaConfig: {
-              isColorable: false,
-              style: 'painting'
-            },
-            tags: [],
-            visibility: 'public'
-          } as CreateWorkParams;
-          break;
-      }
-
-      const work = await worksService.createWork(createWorkParams);
+      const workData = createUploadWorkData(
+        title,
+        description,
+        storageImageUrl,
+        mediaType
+      );
       
-      console.log('🎉 Work created successfully! ID:', work.id);
-
+      console.log('📦 Work data being created:', workData);
+      
+      // Use worksService to create the work record
+      const work = await worksService.createWork(workData);
+      
+      console.log('🎉 Work created successfully!');
+      console.log('🆔 Work ID:', work.id);
+      console.log('🖼️ Work assetUrl:', work.assetUrl);
+  
       showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
       
       // Reset form on success
@@ -233,7 +248,7 @@ const UploadScreen = () => {
           Choose the type of artwork you're uploading
         </Text>
         <View style={styles.mediaTypeGrid}>
-          {(['line_art', 'colored_art', 'digital_art'] as MediaType[]).map(type => (
+          {(['line_art', 'colored_art', 'digital_art'] as UploadableMediaType[]).map(type => (
             <TouchableOpacity
               key={type}
               style={[

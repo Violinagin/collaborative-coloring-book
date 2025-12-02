@@ -22,10 +22,12 @@ import { useAuth } from '../context/AuthContext';
 import { mediaUtils } from '../utils/mediaUtils';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { AlertModal } from '../components/AlertModal';
+import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
+  
   const { user: currentUser } = useAuth();
   const { work } = route.params;
   const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
@@ -70,10 +72,20 @@ const isOwner = currentUser?.id === work?.artistId;
   };
 
   useEffect(() => {
-    if (work) {
-      loadWorkData(work.id);
+    let isMounted = true;
+  
+  const loadData = async () => {
+    if (isMounted && work) {
+      await loadWorkData(work.id);
     }
-  }, [work]);
+  };
+
+  loadData();
+
+  return () => {
+    isMounted = false;
+  };
+}, [work]);
 
   const loadWorkData = async (workId: string) => {
     try {
@@ -240,6 +252,7 @@ const isOwner = currentUser?.id === work?.artistId;
   const { work: currentWork, originalWork, collaborations, artist } = workContext;
 
   return (
+    <ScreenErrorBoundary onReset={() => loadWorkData(work.id)}>
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -466,6 +479,7 @@ const isOwner = currentUser?.id === work?.artistId;
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </ScreenErrorBoundary>
   );
 };
 
@@ -694,15 +708,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
-  },
-  commentAuthor: {
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  commentDate: {
-    color: '#666',
-    fontSize: 12,
-    flex: 1,
   },
 });
 

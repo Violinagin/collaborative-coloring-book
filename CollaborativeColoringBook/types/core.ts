@@ -114,21 +114,37 @@ export type CreativeWork = {
   | { mediaType: 'animation'; mediaConfig: AnimationConfig }
 );
 
-export type CreateWorkParams = {
+export type UploadWork = {
   title: string;
   description?: string;
   assetUrl: string;
   originalWorkId?: string;
-  tags?: string[];
-  visibility?: 'public' | 'private' | 'unlisted';
+  tags: string[];
+  visibility: 'public' | 'private' | 'unlisted';
 } & (
   | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
   | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
   | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
-  | { mediaType: 'writing'; mediaConfig: WritingConfig }
-  | { mediaType: 'music'; mediaConfig: MusicConfig }
-  | { mediaType: 'animation'; mediaConfig: AnimationConfig }
 );
+
+export const isValidUploadWork = (work: UploadWork): work is UploadWork & (
+  | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
+  | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
+  | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
+) => {
+  if (work.mediaType === 'line_art') {
+    return (work.mediaConfig as LineArtConfig).isColorable === true;
+  }
+  if (work.mediaType === 'colored_art') {
+    return (work.mediaConfig as ColoredArtConfig).technique !== undefined;
+  }
+  if (work.mediaType === 'digital_art') {
+    return (work.mediaConfig as DigitalArtConfig).isColorable === false;
+  }
+  return false;
+};
+
+export type UploadableMediaType = 'line_art' | 'colored_art' | 'digital_art';
 
 export interface Collaboration {
   id: string;
@@ -146,6 +162,8 @@ export interface WorkWithContext {
     originalWork?: CreativeWork;
     collaborations: Collaboration[];
     artist?: User;
+    remixes?: CreativeWork[]; // Works derived FROM this one
+    siblings?: CreativeWork[]; // Other works from same original
 }
 
 export interface Like {
@@ -183,3 +201,12 @@ export const isLineArtConfig = (config: MediaConfig): config is LineArtConfig =>
     }
     return null;
   };
+
+  // Remix/Collaboration Types
+export type RemixType = CollaborationType; // Reuse your existing type
+
+export interface DerivativeWorkData extends Omit<UploadWork, 'originalWorkId'> {
+  originalWorkId: string;  // Required for derivatives
+  remixType: RemixType;
+  attribution?: string;
+};

@@ -1,60 +1,81 @@
 // components/ErrorBoundary.tsx
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 
-interface Props {
-  children: React.ReactNode;
-  fallback?: React.ComponentType<{ error: Error; resetError: () => void }>;
-}
-
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
-  error: Error | null;
+  error?: Error;
+  errorInfo?: React.ErrorInfo;
 }
 
-class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error
-    };
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    // Update state so the next render shows the fallback UI
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('🚨 App Crashed:', error, errorInfo);
-    // In production, you'd send this to your error reporting service
-    // Sentry.captureException(error, { extra: errorInfo });
+    // You can also log the error to an error reporting service
+    console.error('💥 Error caught by boundary:', error);
+    console.error('💥 Error info:', errorInfo);
+    this.setState({ errorInfo });
   }
 
-  resetError = () => {
-    this.setState({
-      hasError: false,
-      error: null
-    });
+  handleReset = () => {
+    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+  };
+
+  handleReload = () => {
+    // In a real app, you might want to do more here
+    this.handleReset();
   };
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        const FallbackComponent = this.props.fallback;
-        return <FallbackComponent error={this.state.error!} resetError={this.resetError} />;
-      }
-
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.message}>{this.state.error?.message}</Text>
-          <TouchableOpacity style={styles.button} onPress={this.resetError}>
-            <Text style={styles.buttonText}>Try Again</Text>
-          </TouchableOpacity>
+          <Text style={styles.emoji}>💥</Text>
+          <Text style={styles.title}>Oops! Something went wrong</Text>
+          <Text style={styles.message}>
+            The app encountered an unexpected error. This has been reported to our team.
+          </Text>
+          
+          {__DEV__ && this.state.error && (
+            <View style={styles.debugInfo}>
+              <Text style={styles.debugTitle}>Debug Information:</Text>
+              <Text style={styles.debugError}>
+                {this.state.error.toString()}
+              </Text>
+              {this.state.errorInfo && (
+                <Text style={styles.debugStack}>
+                  {this.state.errorInfo.componentStack}
+                </Text>
+              )}
+            </View>
+          )}
+
+          <View style={styles.buttonsContainer}>
+            <TouchableOpacity 
+              style={[styles.button, styles.secondaryButton]}
+              onPress={this.handleReset}
+            >
+              <Text style={styles.secondaryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.button, styles.primaryButton]}
+              onPress={this.handleReload}
+            >
+              <Text style={styles.primaryButtonText}>Reload App</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -68,29 +89,79 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
     backgroundColor: '#f5f5f5',
   },
+  emoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
   title: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
+    textAlign: 'center',
+    marginBottom: 12,
     color: '#333',
   },
   message: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 32,
+    color: '#666',
+    lineHeight: 22,
+  },
+  debugInfo: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+    width: '100%',
+    maxHeight: 200,
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  debugError: {
+    fontSize: 12,
+    color: '#d32f2f',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  debugStack: {
+    fontSize: 10,
+    color: '#666',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
   },
   button: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    flex: 1,
+    paddingVertical: 12,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  buttonText: {
+  primaryButton: {
+    backgroundColor: '#007AFF',
+  },
+  secondaryButton: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  primaryButtonText: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButtonText: {
+    color: '#007AFF',
     fontSize: 16,
     fontWeight: '600',
   },

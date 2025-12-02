@@ -1,14 +1,16 @@
 import { supabase } from '../lib/supabase';
-import { CreativeWork, Collaboration, WorkWithContext, MediaType, MediaConfig, User, CreateWorkParams } from '../types/core';
+import { CreativeWork, Collaboration, WorkWithContext, User, UploadWork } from '../types/core';
 import { storageService } from '../services/storageService'
 
 export const worksService = {
-  async createWork(workData: CreateWorkParams): Promise<CreativeWork> {
+  async createWork(workData: UploadWork): Promise<CreativeWork> {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
+
+    let derivationChain: string[] = [];
+    const metadata = {};
     
     // Build derivation chain if this is a derivative work
-    let derivationChain: string[] = [];
     if (workData.originalWorkId) {
       const originalWork = await this.getWork(workData.originalWorkId);
       derivationChain = [...originalWork.derivationChain, workData.originalWorkId];
@@ -25,7 +27,7 @@ export const worksService = {
       derivation_chain: derivationChain,
       tags: workData.tags || [],
       visibility: workData.visibility || 'public',
-      metadata: {}
+      metadata: metadata
     };
     
     const { data, error } = await supabase
