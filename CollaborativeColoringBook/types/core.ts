@@ -27,10 +27,6 @@ export type CollaborationType =
     roles: UserRole[];
     joinedDate: Date;
     // Content
-    uploadedArtworks: string[]; // artwork IDs
-    colorizedVersions: string[]; // colorized version IDs
-    likedArtworks: string[]; // artwork IDs
-  
     // Activity
     //recentActivity: Activity[];
   }
@@ -93,7 +89,9 @@ export type CreativeWork = {
   title: string;
   description?: string;
   artistId: string;
+  mediaType: MediaType;
   assetUrl: string;
+  mediaConfig: MediaConfig;
   originalWorkId?: string;
   derivationChain: string[];
   metadata: Record<string, any>;
@@ -105,14 +103,7 @@ export type CreativeWork = {
   comments?: Comment[];
   userHasLiked?: boolean;
   artist?: User;
-} & (
-  | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
-  | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
-  | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
-  | { mediaType: 'writing'; mediaConfig: WritingConfig }
-  | { mediaType: 'music'; mediaConfig: MusicConfig }
-  | { mediaType: 'animation'; mediaConfig: AnimationConfig }
-);
+}
 
 export type UploadWork = {
   title: string;
@@ -121,27 +112,34 @@ export type UploadWork = {
   originalWorkId?: string;
   tags: string[];
   visibility: 'public' | 'private' | 'unlisted';
-} & (
-  | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
-  | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
-  | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
-);
+  mediaType: 'line_art' | 'colored_art' | 'digital_art';
+  mediaConfig: LineArtConfig | ColoredArtConfig | DigitalArtConfig;
+}
 
-export const isValidUploadWork = (work: UploadWork): work is UploadWork & (
-  | { mediaType: 'line_art'; mediaConfig: LineArtConfig }
-  | { mediaType: 'colored_art'; mediaConfig: ColoredArtConfig }
-  | { mediaType: 'digital_art'; mediaConfig: DigitalArtConfig }
-) => {
+export const validateUploadWork = (work: UploadWork): { isValid: boolean; error?: string } => {
+  // Runtime validation instead of compile-time
   if (work.mediaType === 'line_art') {
-    return (work.mediaConfig as LineArtConfig).isColorable === true;
+    const config = work.mediaConfig as LineArtConfig;
+    if (!config.isColorable || !config.complexity) {
+      return { isValid: false, error: 'Invalid line art config' };
+    }
   }
+  
   if (work.mediaType === 'colored_art') {
-    return (work.mediaConfig as ColoredArtConfig).technique !== undefined;
+    const config = work.mediaConfig as ColoredArtConfig;
+    if (!config.isColorable || !config.technique || !config.complexity) {
+      return { isValid: false, error: 'Invalid colored art config' };
+    }
   }
+  
   if (work.mediaType === 'digital_art') {
-    return (work.mediaConfig as DigitalArtConfig).isColorable === false;
+    const config = work.mediaConfig as DigitalArtConfig;
+    if (config.isColorable !== false) {
+      return { isValid: false, error: 'Invalid digital art config' };
+    }
   }
-  return false;
+  
+  return { isValid: true };
 };
 
 export type UploadableMediaType = 'line_art' | 'colored_art' | 'digital_art';
@@ -205,8 +203,13 @@ export const isLineArtConfig = (config: MediaConfig): config is LineArtConfig =>
   // Remix/Collaboration Types
 export type RemixType = CollaborationType; // Reuse your existing type
 
-export interface DerivativeWorkData extends Omit<UploadWork, 'originalWorkId'> {
+export interface DerivativeWorkData extends UploadWork {
   originalWorkId: string;  // Required for derivatives
-  remixType: RemixType;
+  remixType?: CollaborationType;
   attribution?: string;
+};
+
+export const extractUploadWork = (data: DerivativeWorkData): UploadWork => {
+  const { remixType, attribution, ...uploadWork } = data;
+  return uploadWork;
 };

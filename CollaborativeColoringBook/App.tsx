@@ -7,6 +7,7 @@ import { RootStackParamList } from './types/navigation';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProfileScreen from './screens/ProfileScreen';
 //import ColoringScreen from './screens/ColoringScreen';
+import CreateRemixScreen from './screens/CreateRemixScreen';
 import UploadScreen from './screens/UploadScreen';
 import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
@@ -56,6 +57,11 @@ function Navigation() {
               name="Upload" 
               component={UploadScreen}
               options={{ title: 'Upload Line Art' }}
+            />
+            <Stack.Screen 
+              name="CreateRemix" 
+              component={CreateRemixScreen}
+              options={{ title: 'Create Remix' }}
             />
             {/* <Stack.Screen 
               name="SkiaColoring" 

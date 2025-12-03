@@ -4,26 +4,50 @@ import { CreativeWork, MediaConfig, LineArtConfig, ColoredArtConfig, MediaType, 
 export const mediaUtils = {
   // Check if a work is colorable
   isColorable(work: CreativeWork): boolean {
-    if (work.mediaType === 'line_art' || work.mediaType === 'colored_art') {
-      const config = work.mediaConfig as LineArtConfig | ColoredArtConfig;
-      return config.isColorable;
-    }
-    return false;
+    return work.mediaType === 'line_art' || work.mediaType === 'colored_art';
   },
 
   // Get human-readable media type label
   getMediaTypeLabel(mediaType: MediaType): string {
     const labels: Record<MediaType, string> = {
-      'line_art': '🎨 Line Art',
+      'line_art': '✏️ Line Art',
       'colored_art': '🌈 Colored Art', 
-      'digital_art': '✨ Digital Art',
+      'digital_art': '🖥️ Digital Art',
       'writing': '📝 Writing',
       'music': '🎵 Music',
       'animation': '🎬 Animation',
       'comic': '📚 Comic',
       'three_d': '🔷 3D Model'
     };
-    return labels[mediaType];
+    return labels[mediaType] || mediaType;
+  },
+
+  getMediaTypeColor(type: MediaType): string {
+    const colors: Record<MediaType, string> = {
+      'line_art': '#3b82f6',    // Blue
+      'colored_art': '#8b5cf6', // Purple
+      'digital_art': '#10b981', // Green
+      'writing': '#f59e0b',     // Amber
+      'music': '#ec4899',       // Pink
+      'animation': '#ef4444',   // Red
+      'comic': '#f97316',       // Orange
+      'three_d': '#06b6d4'      // Cyan
+    };
+    return colors[type] || '#6b7280';
+  },
+
+  getMediaTypeDescription(type: MediaType): string {
+    const descriptions: Record<MediaType, string> = {
+      'line_art': 'Black and white drawings ready for coloring',
+      'colored_art': 'Already colored artwork',
+      'digital_art': 'Finished digital paintings and illustrations',
+      'writing': 'Stories, poems, and written works',
+      'music': 'Audio compositions and soundscapes',
+      'animation': 'Animated sequences and motion graphics',
+      'comic': 'Comic strips and graphic narratives',
+      'three_d': '3D models and sculptures'
+    };
+    return descriptions[type] || 'Creative work';
   },
 
   // Get colorable config safely

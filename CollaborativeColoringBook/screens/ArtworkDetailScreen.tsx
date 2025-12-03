@@ -23,6 +23,7 @@ import { mediaUtils } from '../utils/mediaUtils';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { AlertModal } from '../components/AlertModal';
 import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
+import { RemixButton } from '../components/RemixButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
@@ -119,9 +120,6 @@ const isOwner = currentUser?.id === work?.artistId;
             displayName: 'Unknown Artist',
             roles: [],
             joinedDate: new Date(),
-            uploadedArtworks: [],
-            colorizedVersions: [],
-            likedArtworks: []
           }
         });
       }
@@ -394,6 +392,11 @@ const isOwner = currentUser?.id === work?.artistId;
             >
               <Text style={styles.secondaryButtonText}>✨ Create Derivative</Text>
             </TouchableOpacity>
+            <RemixButton 
+              workId={work.id}
+              workTitle={work.title}
+              style={{ marginBottom: 12 }}
+            />
           </View>
 
           {/* Comments Section */}

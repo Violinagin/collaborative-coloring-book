@@ -7,46 +7,74 @@ import {
   StyleSheet, 
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl 
+  RefreshControl,
+  ScrollView,
+  Modal 
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { worksService } from '../services/worksService';
 import { socialService } from '../services/socialService';
-import { CreativeWork } from '../types/core';
+import { CreativeWork, MediaType } from '../types/core';
 import { mediaUtils } from '../utils/mediaUtils';
 import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 
+// All available media types
+const ALL_MEDIA_TYPES: MediaType[] = [
+  'line_art', 'colored_art', 'digital_art', 
+  'writing', 'music', 'animation', 'comic', 'three_d'
+];
+
 const GalleryScreen = ({ navigation }: Props) => {
   const { user } = useAuth();
   const isFocused = useIsFocused();
   const [works, setWorks] = useState<CreativeWork[]>([]);
+  const [filteredWorks, setFilteredWorks] = useState<CreativeWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [likeData, setLikeData] = useState<{[workId: string]: {count: number, isLiked: boolean}}>({});
   const [commentData, setCommentData] = useState<{[workId: string]: number}>({});
 
+  // Filtering state
+  const [selectedMediaTypes, setSelectedMediaTypes] = useState<MediaType[]>(ALL_MEDIA_TYPES);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'trending'>('recent');
+
   const loadWorks = async () => {
     try {
       setLoading(true);
       
-      // Use the new service to get colorable works
-      const colorableWorks = await worksService.getColorableWorks();
-      setWorks(colorableWorks);
+      // Get ALL works (not just colorable)
+      const allWorks = await worksService.getAllWorks();
+      console.log('📊 Loaded', allWorks.length, 'works total');
       
-      // Load social data for all works
-      const likeData: {[workId: string]: {count: number, isLiked: boolean}} = {};
-      const commentData: {[workId: string]: number} = {};
+      setWorks(allWorks);
+      applyFilters(allWorks, selectedMediaTypes, sortBy);
       
-      const dataPromises = colorableWorks.map(async (work) => {
-        const [likeCount, workComments, isLiked] = await Promise.all([
-          socialService.getLikeCount(work.id),        
-          socialService.getComments(work.id),         
-          user ? socialService.isLiked(work.id) : false
-        ]);
+      // Load social data
+      await loadSocialData(allWorks);
+      
+    } catch (error) {
+      console.error('Error loading works:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const loadSocialData = async (worksToLoad: CreativeWork[]) => {
+    const likeData: {[workId: string]: {count: number, isLiked: boolean}} = {};
+    const commentData: {[workId: string]: number} = {};
+      
+    const dataPromises = worksToLoad.map(async (work) => {
+      const [likeCount, workComments, isLiked] = await Promise.all([
+        socialService.getLikeCount(work.id),        
+        socialService.getComments(work.id),         
+        user ? socialService.isLiked(work.id) : false
+      ]);
         
         return { 
           workId: work.id, 
@@ -68,24 +96,79 @@ const GalleryScreen = ({ navigation }: Props) => {
       
       setLikeData(likeData);
       setCommentData(commentData);
+
+    };
+
+    const applyFilters = (worksList: CreativeWork[], mediaTypes: MediaType[], sortMethod: string) => {
+      let filtered = worksList;
       
-    } catch (error) {
-      console.error('Error loading works:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+      // Filter by media type
+      if (mediaTypes.length < ALL_MEDIA_TYPES.length) {
+        filtered = filtered.filter(work => 
+          mediaTypes.includes(work.mediaType)
+        );
+      }
+      
+      // Sort
+      switch (sortMethod) {
+        case 'recent':
+          filtered = [...filtered].sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          break;
+          
+        case 'popular':
+          filtered = [...filtered].sort((a, b) => {
+            const likesA = likeData[a.id]?.count || 0;
+            const likesB = likeData[b.id]?.count || 0;
+            return likesB - likesA;
+          });
+          break;
+          
+        case 'trending':
+          // Could be based on recent likes/comments
+          // For now, same as recent
+          filtered = [...filtered].sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          break;
+      }
+      
+      setFilteredWorks(filtered);
+    };
+  
+    // Toggle media type filter
+    const toggleMediaType = (type: MediaType) => {
+      const newTypes = selectedMediaTypes.includes(type)
+        ? selectedMediaTypes.filter(t => t !== type)
+        : [...selectedMediaTypes, type];
+      
+      setSelectedMediaTypes(newTypes);
+      applyFilters(works, newTypes, sortBy);
+    };
+  
+    // Select all media types
+    const selectAllMediaTypes = () => {
+      setSelectedMediaTypes(ALL_MEDIA_TYPES);
+      applyFilters(works, ALL_MEDIA_TYPES, sortBy);
+    };
+  
+    // Clear all media types (then user can select specific ones)
+    const clearMediaTypes = () => {
+      setSelectedMediaTypes([]);
+      applyFilters(works, [], sortBy);
+    };
+  
+    useEffect(() => {
+      if (isFocused) {
+        loadWorks();
+      }
+    }, [isFocused, user]);
 
-  useEffect(() => {
-    if (isFocused) {
-      loadWorks();
-    }
-  }, [isFocused]);
-
-  useEffect(() => {
-    loadWorks();
-  }, [user]);
+    useEffect(() => {
+      // Reapply filters when sort changes
+      applyFilters(works, selectedMediaTypes, sortBy);
+    }, [sortBy]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -94,26 +177,15 @@ const GalleryScreen = ({ navigation }: Props) => {
 
   // Handle like - redirect to auth if not logged in
   const handleLike = async (workId: string) => {
-    console.log('🎯 ===== LIKE BUTTON PRESSED =====');
-  console.log('🆔 Work ID:', workId);
-  console.log('👤 User:', user?.id);
-  console.log('📊 Current like data:', likeData[workId]);
     if (!user) {
-      console.log('🚫 No user - redirecting to auth');
       navigation.navigate('Auth');
       return;
     }
-    console.log('✅ User authenticated, proceeding with like...');
     try {
       // Optimistic update
       const currentLikeState = likeData[workId]?.isLiked || false;
       const currentCount = likeData[workId]?.count || 0;
-      console.log('🔄 Optimistic update - current state:', {
-        wasLiked: currentLikeState,
-        currentCount: currentCount,
-        newState: !currentLikeState,
-        newCount: currentLikeState ? currentCount - 1 : currentCount + 1
-      });
+
       setLikeData(prev => ({
         ...prev,
         [workId]: {
@@ -122,12 +194,8 @@ const GalleryScreen = ({ navigation }: Props) => {
         }
       }));
 
-      console.log('📞 Calling socialService.toggleLike...');
     const nowLiked = await socialService.toggleLike(workId, user.id);
-    console.log('✅ socialService returned:', nowLiked);
-    
     const newLikeCount = await socialService.getLikeCount(workId);
-    console.log('📈 Actual like count from database:', newLikeCount);
       
       // Update with actual database state
       setLikeData(prev => ({
@@ -137,18 +205,11 @@ const GalleryScreen = ({ navigation }: Props) => {
           isLiked: nowLiked
         }
       }));
-
-      console.log('🎉 Like operation completed successfully!');
-      console.log('📊 Final state:', {
-        isLiked: nowLiked,
-        count: newLikeCount
-      });
       
     } catch (error) {
       console.error('Error toggling like:', error);
       loadWorks(); // Reload to get correct state
     }
-    console.log('🎯 ===== LIKE OPERATION COMPLETE =====');
   };
 
   const renderWorkItem = ({ item }: { item: CreativeWork }) => {
@@ -181,13 +242,22 @@ const GalleryScreen = ({ navigation }: Props) => {
             </Text>
           )}
           
-          {/* Work Type & Colorable Badge */}
+          {/* Media Type Badge */}
           <View style={styles.workMeta}>
-            <Text style={styles.mediaType}>
+            <Text style={[
+              styles.mediaTypeBadge,
+              { backgroundColor: mediaUtils.getMediaTypeColor(item.mediaType) }
+            ]}>
               {mediaUtils.getMediaTypeLabel(item.mediaType)}
             </Text>
+            
             {mediaUtils.isColorable(item) && (
-              <Text style={styles.colorableBadge}>🖍️ Colorable</Text>
+              <Text style={styles.colorableBadge}>🎨 Colorable</Text>
+            )}
+            
+            {/* Remix Chain Indicator */}
+            {item.originalWorkId && (
+              <Text style={styles.remixBadge}>🔄 Remix</Text>
             )}
           </View>
           
@@ -212,6 +282,16 @@ const GalleryScreen = ({ navigation }: Props) => {
             >
               <Text style={styles.actionText}>💬 {commentCount}</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.remixButton}
+              onPress={() => navigation.navigate('CreateRemix', { 
+                originalWorkId: item.id,
+                originalWorkTitle: item.title
+              })}
+            >
+              <Text style={styles.remixButtonText}>🎵 Remix</Text>
+            </TouchableOpacity>
             
             {/* {mediaUtils.isColorable(item) && (
               <TouchableOpacity 
@@ -227,17 +307,120 @@ const GalleryScreen = ({ navigation }: Props) => {
     );
   };
 
+  const renderFilterModal = () => (
+    <Modal
+      visible={showFilterModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowFilterModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Filter Works</Text>
+            <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Media Types</Text>
+            <View style={styles.filterActions}>
+              <TouchableOpacity onPress={selectAllMediaTypes}>
+                <Text style={styles.filterAction}>Select All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={clearMediaTypes}>
+                <Text style={styles.filterAction}>Clear All</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.mediaTypeGrid}>
+              {ALL_MEDIA_TYPES.map(type => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.mediaTypeFilter,
+                    selectedMediaTypes.includes(type) && styles.mediaTypeFilterSelected
+                  ]}
+                  onPress={() => toggleMediaType(type)}
+                >
+                  <Text style={[
+                    styles.mediaTypeFilterText,
+                    selectedMediaTypes.includes(type) && styles.mediaTypeFilterTextSelected
+                  ]}>
+                    {mediaUtils.getMediaTypeLabel(type)}
+                  </Text>
+                  <Text style={styles.mediaTypeCount}>
+                    ({works.filter(w => w.mediaType === type).length})
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            <Text style={styles.filterTitle}>Sort By</Text>
+            <View style={styles.sortOptions}>
+              {(['recent', 'popular', 'trending'] as const).map(option => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.sortOption,
+                    sortBy === option && styles.sortOptionSelected
+                  ]}
+                  onPress={() => setSortBy(option)}
+                >
+                  <Text style={[
+                    styles.sortOptionText,
+                    sortBy === option && styles.sortOptionTextSelected
+                  ]}>
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+          
+          <TouchableOpacity 
+            style={styles.applyButton}
+            onPress={() => setShowFilterModal(false)}
+          >
+            <Text style={styles.applyButtonText}>Apply Filters</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (loading && works.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading creative works...</Text>
+        <Text style={styles.loadingText}>Loading creative universe...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Header with filter button */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Creative Universe</Text>
+        <TouchableOpacity 
+          style={styles.filterButton}
+          onPress={() => setShowFilterModal(true)}
+        >
+          <Text style={styles.filterButtonText}>🔧 Filter</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Active filters summary */}
+      <View style={styles.activeFilters}>
+        <Text style={styles.activeFiltersText}>
+          Showing {filteredWorks.length} of {works.length} works
+          {selectedMediaTypes.length < ALL_MEDIA_TYPES.length && 
+            ` • ${selectedMediaTypes.length} media types`
+          }
+        </Text>
+      </View>
       <FlatList
         data={works}
         renderItem={renderWorkItem}
@@ -259,6 +442,15 @@ const GalleryScreen = ({ navigation }: Props) => {
           </View>
         }
       />
+      {renderFilterModal()}
+      
+      {/* Upload FAB */}
+      <TouchableOpacity 
+        style={styles.uploadFab}
+        onPress={() => navigation.navigate('Upload')}
+      >
+        <Text style={styles.uploadFabText}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -266,7 +458,199 @@ const GalleryScreen = ({ navigation }: Props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8fafc',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 20,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: '#475569',
+  },
+  activeFilters: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f8fafc',
+  },
+  activeFiltersText: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  mediaTypeBadge: {
+    fontSize: 11,
+    color: 'white',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  remixBadge: {
+    fontSize: 11,
+    color: '#7c3aed',
+    backgroundColor: '#f5f3ff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  remixButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#7C3AED',
+    borderRadius: 16,
+  },
+  remixButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  closeButton: {
+    fontSize: 24,
+    color: '#64748b',
+  },
+  filterSection: {
+    padding: 20,
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 12,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  filterAction: {
+    fontSize: 14,
+    color: '#7C3AED',
+    textDecorationLine: 'underline',
+  },
+  mediaTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 24,
+  },
+  mediaTypeFilter: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  mediaTypeFilterSelected: {
+    backgroundColor: '#7C3AED',
+  },
+  mediaTypeFilterText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  mediaTypeFilterTextSelected: {
+    color: 'white',
+  },
+  mediaTypeCount: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  sortOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sortOption: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  sortOptionSelected: {
+    backgroundColor: '#7C3AED',
+  },
+  sortOptionText: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  sortOptionTextSelected: {
+    color: 'white',
+  },
+  applyButton: {
+    backgroundColor: '#7C3AED',
+    margin: 20,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  uploadFab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#7C3AED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  uploadFabText: {
+    fontSize: 24,
+    color: 'white',
+    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,

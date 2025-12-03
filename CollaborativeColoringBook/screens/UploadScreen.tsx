@@ -13,15 +13,30 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { worksService } from '../services/worksService';
 import { useAuth } from '../context/AuthContext';
-import { UploadableMediaType, CreativeWork, UploadWork, LineArtConfig, ColoredArtConfig, DigitalArtConfig } from '../types/core';
+import { UploadableMediaType, CreativeWork, UploadWork, LineArtConfig, ColoredArtConfig, DigitalArtConfig, DerivativeWorkData, RemixType } from '../types/core';
 import { AlertModal } from '../components/AlertModal';
 import { storageService } from '../services/storageService';
+import { useRoute } from '@react-navigation/native';
+
+interface RouteParams {
+  originalWorkId?: string;
+  originalWork?: CreativeWork;
+  remixType?: RemixType;
+  suggestedMediaType?: string;
+}
 
 const UploadScreen = () => {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const route = useRoute();
+  const params = route.params as {
+    originalWorkId?: string;
+    originalWork?: CreativeWork;
+  } || {};
   const [mediaType, setMediaType] = useState<UploadableMediaType>('line_art');
+  const isRemix = !!params.originalWorkId;
+  const originalWork = params.originalWork;
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -30,6 +45,9 @@ const UploadScreen = () => {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
+  
+  
+  
   
   const createUploadWorkData = (
     title: string,
@@ -44,6 +62,7 @@ const UploadScreen = () => {
       originalWorkId: undefined as string | undefined,
       tags: [] as string[],
       visibility: 'public' as const,
+      mediaType: mediaType,
     };
   
     // Create objects with exact types first, then cast
@@ -176,21 +195,35 @@ const UploadScreen = () => {
       
       console.log('✅ Image uploaded to storage:', storageImageUrl);
 
-      const workData = createUploadWorkData(
+      const workData: UploadWork = createUploadWorkData(
         title,
         description,
         storageImageUrl,
         mediaType
       );
+
+      let createdWork: CreativeWork;
+    
+      if (isRemix && originalWork) {
+        // Create as remix
+        const remixData: DerivativeWorkData = {
+          ...workData,
+          originalWorkId: originalWork.id,
+          remixType: 'remix',
+          attribution: `Inspired by "${originalWork.title}" by ${originalWork.artist?.displayName}`
+        };
+        createdWork = await worksService.createRemix(remixData);
+      } else {
+        // Create as original work
+        createdWork = await worksService.createWork(workData);
       
       console.log('📦 Work data being created:', workData);
       
       // Use worksService to create the work record
-      const work = await worksService.createWork(workData);
       
       console.log('🎉 Work created successfully!');
-      console.log('🆔 Work ID:', work.id);
-      console.log('🖼️ Work assetUrl:', work.assetUrl);
+      console.log('🆔 Work ID:', createdWork.id);
+      console.log('🖼️ Work assetUrl:', createdWork.assetUrl);
   
       showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
       
@@ -199,6 +232,8 @@ const UploadScreen = () => {
       setDescription('');
       setImageUri(null);
       setMediaType('line_art');
+    }
+
       
     } catch (error: any) {
       console.error('💥 Upload failed:', error);
@@ -213,6 +248,16 @@ const UploadScreen = () => {
 
   return (
     <ScrollView style={styles.container}>
+       {isRemix && originalWork && (
+        <View style={styles.remixHeader}>
+          <Text style={styles.remixTitle}>
+            🎨 Creating a Remix
+          </Text>
+          <Text style={styles.remixSubtitle}>
+            Based on "{originalWork.title}"
+          </Text>
+        </View>
+      )}
       <Text style={styles.title}>Upload Creative Work</Text>
       
       <AlertModal
@@ -555,6 +600,24 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     fontWeight: '500',
+  },
+  remixHeader: {
+    backgroundColor: '#f5f3ff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#7C3AED',
+  },
+  remixTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#7C3AED',
+    marginBottom: 4,
+  },
+  remixSubtitle: {
+    fontSize: 14,
+    color: '#6d28d9',
   },
 });
 

@@ -1,4 +1,4 @@
-import { CreativeWork } from './core'; 
+import { CreativeWork, RemixType, UploadableMediaType  } from './core'; 
 
 export type RootStackParamList = {
   Gallery: undefined;  
@@ -10,7 +10,20 @@ export type RootStackParamList = {
     imageUrl: string;
     title?: string;
   };
-  Upload: undefined;
+  Upload: {
+    originalWorkId?: string;
+    originalWork?: CreativeWork;
+  } | undefined;
+  CreateRemix: {
+    originalWorkId: string;
+    originalWorkTitle?: string;
+  };
   Auth: undefined;
   EditProfile: undefined;
 };
+
+declare global {
+  namespace ReactNavigation {
+    interface RootParamList extends RootStackParamList {}
+  }
+}

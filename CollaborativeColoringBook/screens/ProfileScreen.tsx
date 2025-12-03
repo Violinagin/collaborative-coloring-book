@@ -78,9 +78,6 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         bio: 'Welcome to the coloring community!',
         roles: ['supporter'],
         joinedDate: new Date(),
-        uploadedArtworks: [],
-        colorizedVersions: [],
-        likedArtworks: [],
       };
       setProfileUser(userData);
       
@@ -572,10 +569,10 @@ const ProfileScreen = ({ route, navigation }: Props) => {
           <Text style={styles.statNumber}>{userLineArt.length}</Text>
           <Text style={styles.statLabel}>Artworks</Text>
         </View>
-        <View style={styles.stat}>
+        {/* <View style={styles.stat}>
           <Text style={styles.statNumber}>{user.colorizedVersions?.length || 0}</Text>
           <Text style={styles.statLabel}>Colorizations</Text>
-        </View>
+        </View> */}
         <View style={styles.stat}>
           <Text style={styles.statNumber}>{followerCount}</Text>
           <Text style={styles.statLabel}>Followers</Text>
