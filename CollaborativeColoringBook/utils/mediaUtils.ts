@@ -1,5 +1,5 @@
 // utils/mediaUtils.ts
-import { CreativeWork, MediaConfig, LineArtConfig, ColoredArtConfig, MediaType, DigitalArtConfig } from '../types/core';
+import { CreativeWork, LineArtConfig, ColoredArtConfig, MediaType, DigitalArtConfig } from '../types/core';
 
 export const mediaUtils = {
   // Check if a work is colorable

@@ -44,6 +44,7 @@ const GalleryScreen = ({ navigation }: Props) => {
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'trending'>('recent');
 
   const loadWorks = async () => {
+    console.log('🚀 === loadWorks START ===', Date.now());
     try {
       setLoading(true);
       
