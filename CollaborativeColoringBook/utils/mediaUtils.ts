@@ -1,53 +1,149 @@
 // utils/mediaUtils.ts
-import { CreativeWork, LineArtConfig, ColoredArtConfig, MediaType, DigitalArtConfig } from '../types/core';
+import { CreativeWork, LineArtConfig, ColoredArtConfig, MediaType, DigitalArtConfig, UploadableMediaType } from '../types/core';
+
+// Define the media type configuration
+export interface MediaTypeConfig {
+  value: MediaType;
+  emoji: string;
+  label: string;
+  description: string;
+  color: string;
+}
+
+export interface UploadableMediaTypeConfig {
+  value: UploadableMediaType;  // This is the key change
+  emoji: string;
+  label: string;
+  description: string;
+  color: string;
+}
+
+// All media types with their configurations
+export const MEDIA_TYPE_CONFIGS: MediaTypeConfig[] = [
+  { 
+    value: 'line_art', 
+    emoji: '✏️', 
+    label: 'Line Art', 
+    description: 'Black and white drawings ready for coloring',
+    color: '#3b82f6'
+  },
+  { 
+    value: 'colored_art', 
+    emoji: '🎨', 
+    label: 'Colored Art', 
+    description: 'Already colored artwork',
+    color: '#8b5cf6'
+  },
+  { 
+    value: 'digital_art', 
+    emoji: '🖥️', 
+    label: 'Digital Art', 
+    description: 'Finished digital paintings and illustrations',
+    color: '#10b981'
+  },
+  { 
+    value: 'writing', 
+    emoji: '📝', 
+    label: 'Writing', 
+    description: 'Stories, poems, and written works',
+    color: '#f59e0b'
+  },
+  { 
+    value: 'music', 
+    emoji: '🎵', 
+    label: 'Music', 
+    description: 'Audio compositions and soundscapes',
+    color: '#ec4899'
+  },
+  { 
+    value: 'animation', 
+    emoji: '🎬', 
+    label: 'Animation', 
+    description: 'Animated sequences and motion graphics',
+    color: '#ef4444'
+  },
+  { 
+    value: 'comic', 
+    emoji: '📚', 
+    label: 'Comic', 
+    description: 'Comic strips and graphic narratives',
+    color: '#f97316'
+  },
+  { 
+    value: 'three_d', 
+    emoji: '🔷', 
+    label: '3D Model', 
+    description: '3D models and sculptures',
+    color: '#06b6d4'
+  },
+];
 
 export const mediaUtils = {
+  // Get all media type configs
+  getAllMediaTypes(): MediaTypeConfig[] {
+    return MEDIA_TYPE_CONFIGS;
+  },
+
+  // Get config for a specific media type
+  getMediaTypeConfig(type: MediaType): MediaTypeConfig {
+    const config = MEDIA_TYPE_CONFIGS.find(c => c.value === type);
+    if (!config) {
+      // Fallback for unknown types
+      return {
+        value: type,
+        emoji: '🔄',
+        label: type.replace('_', ' '),
+        description: 'Creative work',
+        color: '#6b7280'
+      };
+    }
+    return config;
+  },
+
+  // Get formatted label with emoji
+  getMediaTypeLabel(type: MediaType): string {
+    const config = this.getMediaTypeConfig(type);
+    return `${config.emoji} ${config.label}`;
+  },
+
+  // Get just the emoji
+  getMediaTypeEmoji(type: MediaType): string {
+    return this.getMediaTypeConfig(type).emoji;
+  },
+
+   // Get description
+  getMediaTypeDescription(type: MediaType): string {
+    return this.getMediaTypeConfig(type).description;
+  },
+
+  // Get color
+  getMediaTypeColor(type: MediaType): string {
+    return this.getMediaTypeConfig(type).color;
+  },
+
+  // Get uploadable media types (for UploadScreen)
+  getUploadableMediaTypes(): UploadableMediaType[] {
+    return ['line_art', 'colored_art', 'digital_art'];
+  },
+  
+  // Get configs for uploadable types
+  getUploadableMediaTypeConfig(type: UploadableMediaType): UploadableMediaTypeConfig {
+    const config = MEDIA_TYPE_CONFIGS.find(c => c.value === type);
+    if (!config) {
+      throw new Error(`Invalid uploadable media type: ${type}`);
+    }
+    return config as UploadableMediaTypeConfig;
+  },
+  
+  getUploadableMediaTypeConfigs(): UploadableMediaTypeConfig[] {
+    return this.getUploadableMediaTypes().map(type => 
+      this.getUploadableMediaTypeConfig(type)
+    );
+  },
+
   // Check if a work is colorable
   isColorable(work: CreativeWork): boolean {
     return work.mediaType === 'line_art' || work.mediaType === 'colored_art';
-  },
-
-  // Get human-readable media type label
-  getMediaTypeLabel(mediaType: MediaType): string {
-    const labels: Record<MediaType, string> = {
-      'line_art': '✏️ Line Art',
-      'colored_art': '🌈 Colored Art', 
-      'digital_art': '🖥️ Digital Art',
-      'writing': '📝 Writing',
-      'music': '🎵 Music',
-      'animation': '🎬 Animation',
-      'comic': '📚 Comic',
-      'three_d': '🔷 3D Model'
-    };
-    return labels[mediaType] || mediaType;
-  },
-
-  getMediaTypeColor(type: MediaType): string {
-    const colors: Record<MediaType, string> = {
-      'line_art': '#3b82f6',    // Blue
-      'colored_art': '#8b5cf6', // Purple
-      'digital_art': '#10b981', // Green
-      'writing': '#f59e0b',     // Amber
-      'music': '#ec4899',       // Pink
-      'animation': '#ef4444',   // Red
-      'comic': '#f97316',       // Orange
-      'three_d': '#06b6d4'      // Cyan
-    };
-    return colors[type] || '#6b7280';
-  },
-
-  getMediaTypeDescription(type: MediaType): string {
-    const descriptions: Record<MediaType, string> = {
-      'line_art': 'Black and white drawings ready for coloring',
-      'colored_art': 'Already colored artwork',
-      'digital_art': 'Finished digital paintings and illustrations',
-      'writing': 'Stories, poems, and written works',
-      'music': 'Audio compositions and soundscapes',
-      'animation': 'Animated sequences and motion graphics',
-      'comic': 'Comic strips and graphic narratives',
-      'three_d': '3D models and sculptures'
-    };
-    return descriptions[type] || 'Creative work';
   },
 
   // Get colorable config safely

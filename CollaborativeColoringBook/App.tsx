@@ -33,7 +33,7 @@ function Navigation() {
           name="Gallery" 
           component={GalleryScreen}
           options={({ navigation }) => ({ 
-            title: 'Collaborative Coloring Book',
+            title: 'Creative Universe',
             headerRight: () => <HeaderRight />
           })}
         />

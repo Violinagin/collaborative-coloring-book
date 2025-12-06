@@ -13,10 +13,12 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { worksService } from '../services/worksService';
 import { useAuth } from '../context/AuthContext';
-import { UploadableMediaType, CreativeWork, UploadWork, LineArtConfig, ColoredArtConfig, DigitalArtConfig, DerivativeWorkData, RemixType } from '../types/core';
+import { UploadableMediaType, CreativeWork, UploadWork, DerivativeWorkData, RemixType } from '../types/core';
 import { AlertModal } from '../components/AlertModal';
 import { storageService } from '../services/storageService';
 import { useRoute } from '@react-navigation/native';
+import { MediaType } from '../types/core';
+import { mediaUtils, UploadableMediaTypeConfig } from '../utils/mediaUtils';
 
 interface RouteParams {
   originalWorkId?: string;
@@ -45,6 +47,7 @@ const UploadScreen = () => {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
+  const UPLOADABLE_MEDIA_TYPES = mediaUtils.getUploadableMediaTypeConfigs();
   
   
   
@@ -232,6 +235,7 @@ const UploadScreen = () => {
       setDescription('');
       setImageUri(null);
       setMediaType('line_art');
+      
     }
 
       
@@ -288,37 +292,55 @@ const UploadScreen = () => {
       
       {/* Media Type Selection */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Media Type</Text>
-        <Text style={styles.sectionDescription}>
-          Choose the type of artwork you're uploading
+  <Text style={styles.sectionTitle}>Media Type</Text>
+  <Text style={styles.sectionDescription}>
+    What kind of creative work is this?
+  </Text>
+  
+  <ScrollView 
+    horizontal 
+    showsHorizontalScrollIndicator={false}
+    style={styles.mediaTypeScroll}
+    contentContainerStyle={styles.mediaTypeScrollContent}
+  >
+    {UPLOADABLE_MEDIA_TYPES.map((config: UploadableMediaTypeConfig) => (
+      <TouchableOpacity
+        key={config.value}
+        style={[
+          styles.mediaTypeOption,
+          mediaType === config.value && styles.mediaTypeOptionSelected
+        ]}
+        onPress={() => setMediaType(config.value)}
+      >
+        <Text style={[
+          styles.mediaTypeOptionEmoji,
+          mediaType === config.value && styles.mediaTypeOptionEmojiSelected
+        ]}>
+          {config.emoji}
         </Text>
-        <View style={styles.mediaTypeGrid}>
-          {(['line_art', 'colored_art', 'digital_art'] as UploadableMediaType[]).map(type => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.mediaTypeButton,
-                mediaType === type && styles.mediaTypeButtonSelected
-              ]}
-              onPress={() => setMediaType(type)}
-            >
-              <Text style={[
-                styles.mediaTypeText,
-                mediaType === type && styles.mediaTypeTextSelected
-              ]}>
-                {type === 'line_art' ? '🎨 Line Art' :
-                 type === 'colored_art' ? '🌈 Colored Art' :
-                 '✨ Digital Art'}
-              </Text>
-              <Text style={styles.mediaTypeDescription}>
-                {type === 'line_art' ? 'Others can color this' :
-                 type === 'colored_art' ? 'Already colored artwork' :
-                 'Finished digital artwork'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+        <Text style={[
+          styles.mediaTypeOptionLabel,
+          mediaType === config.value && styles.mediaTypeOptionLabelSelected
+        ]}>
+          {config.label}
+        </Text>
+        <Text style={styles.mediaTypeOptionDescription}>
+          {config.description}
+        </Text>
+      </TouchableOpacity>
+    ))}
+  </ScrollView>
+  
+  {/* Show selected option details */}
+  <View style={styles.selectedTypeInfo}>
+    <Text style={styles.selectedTypeTitle}>
+      {mediaUtils.getMediaTypeLabel(mediaType)}
+    </Text>
+    <Text style={styles.selectedTypeDescription}>
+      {mediaUtils.getMediaTypeDescription(mediaType)}
+    </Text>
+  </View>
+</View>
 
       {/* Image Upload */}
       <View style={styles.section}>
@@ -394,8 +416,8 @@ const UploadScreen = () => {
       {/* Upload Tips */}
       <View style={styles.tipsSection}>
         <Text style={styles.tipsTitle}>💡 Upload Tips</Text>
-        <Text style={styles.tip}>• Use square images for best results</Text>
-        <Text style={styles.tip}>• High-quality PNG works best for coloring</Text>
+        <Text style={styles.tip}>• Testing phase, use smaller artworks for now!</Text>
+        <Text style={styles.tip}>• No AI artwork here! </Text>
         <Text style={styles.tip}>• Add descriptive titles to help others find your work</Text>
       </View>
     </ScrollView>
@@ -618,6 +640,68 @@ const styles = StyleSheet.create({
   remixSubtitle: {
     fontSize: 14,
     color: '#6d28d9',
+  },
+  mediaTypeScroll: {
+    marginHorizontal: -16, // Bleed to edges
+  },
+  mediaTypeScrollContent: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  mediaTypeOption: {
+    width: 140,
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  mediaTypeOptionSelected: {
+    borderColor: '#7C3AED',
+    backgroundColor: '#f5f3ff',
+  },
+  mediaTypeOptionEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  mediaTypeOptionEmojiSelected: {
+    // Emoji stays the same when selected
+  },
+  mediaTypeOptionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  mediaTypeOptionLabelSelected: {
+    color: '#7C3AED',
+  },
+  mediaTypeOptionDescription: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  selectedTypeInfo: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#7C3AED',
+  },
+  selectedTypeTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  selectedTypeDescription: {
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
   },
 });
 
