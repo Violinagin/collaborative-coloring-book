@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { storageService } from './services/storageService';
 import GalleryScreen from './screens/GalleryScreen';
+import { View, TouchableOpacity, Text, Alert } from 'react-native';
 import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
 import { RootStackParamList } from './types/navigation';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -12,6 +14,8 @@ import UploadScreen from './screens/UploadScreen';
 import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
+import GalleryHeaderRight from './components/GalleryHeaderRight';
+import DebugScreen from './screens/DebugScreen';
 //import SkiaColoringScreen from './screens/SkiaColoringScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 //import { Skia } from '@shopify/react-native-skia';
@@ -34,7 +38,7 @@ function Navigation() {
           component={GalleryScreen}
           options={({ navigation }) => ({ 
             title: 'Creative Universe',
-            headerRight: () => <HeaderRight />
+            headerRight: () => <GalleryHeaderRight />
           })}
         />
         
@@ -42,7 +46,9 @@ function Navigation() {
         <Stack.Screen 
           name="ArtworkDetail" 
           component={ArtworkDetailScreen}
-          options={{ title: 'Artwork Details' }}
+          options={{ title: 'Artwork Details',
+          headerRight: () => <HeaderRight /> 
+        }}
         />
 
         {user ? (
@@ -51,17 +57,26 @@ function Navigation() {
             <Stack.Screen 
               name="Profile" 
               component={ProfileScreen}
-              options={{ title: 'Profile' }}
+              options={{ title: 'Profile', headerRight: () => <HeaderRight /> 
+            }}
             />
             <Stack.Screen 
               name="Upload" 
               component={UploadScreen}
-              options={{ title: 'Upload Line Art' }}
+              options={{ title: 'Upload Line Art', headerRight: () => <HeaderRight />
+             }}
             />
+            <Stack.Screen 
+  name="Debug" 
+  component={DebugScreen}
+  options={{ title: 'Debug Tools' }}
+/>
             <Stack.Screen 
               name="CreateRemix" 
               component={CreateRemixScreen}
-              options={{ title: 'Create Remix' }}
+              options={{ title: 'Create Remix',
+              headerRight: () => <HeaderRight />
+             }}
             />
             {/* <Stack.Screen 
               name="SkiaColoring" 
@@ -71,7 +86,9 @@ function Navigation() {
             <Stack.Screen 
               name="EditProfile" 
               component={EditProfileScreen}
-              options={{ title: 'Edit Profile' }}
+              options={{ title: 'Edit Profile',
+              headerRight: () => <HeaderRight />
+             }}
             />
           </>
         ) : (

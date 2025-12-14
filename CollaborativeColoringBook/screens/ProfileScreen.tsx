@@ -16,6 +16,7 @@ import { User, UserRole, CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
 import RemoteSVG from '../components/RemoteSVG';
 import { worksService } from '../services/worksService'; 
+import { userService } from '../services/userService';
 import { socialService } from '../services/socialService';
 import { AlertModal } from '../components/AlertModal';
 
@@ -24,6 +25,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 const ProfileScreen = ({ route, navigation }: Props) => {
   const [activeTab, setActiveTab] = useState<'lineArt' | 'colorWork' | 'activity'>('lineArt');
   const { user: currentUser, signOut } = useAuth();
+  const { workId } = route.params as any;
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userLineArt, setUserLineArt] = useState<CreativeWork[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,62 +69,71 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     try {
       setLoading(true);
       setLoadFailed(false);
+
+      console.log('🔍 Loading profile for user:', userId);
       
-      // Load user data
-      // ✅ CHANGED: Create basic user for now (we'll build proper userService later)
-      const userData: User = {
-        id: userId,
-        username: `user_${userId.slice(0, 8)}`,
-        displayName: 'User',
-        avatarUrl: '👤',
-        bio: 'Welcome to the coloring community!',
-        roles: ['supporter'],
-        joinedDate: new Date(),
-      };
+      // 1. Load user data using userService
+      const userData = await userService.getUser(userId);
       setProfileUser(userData);
+      console.log('✅ User data loaded:', userData.displayName);
       
-      // Load artworks
-      const artworks = await worksService.getWorksWithSocialData();
-      const userArtworks = artworks.filter(artwork => artwork.artistId === userId);
-      setUserLineArt(userArtworks);
-      // Load user's colorizations
-      const userColorizations = artworks.filter(artwork => 
+      // 2. Load ALL artworks once
+      console.log('🖼️ Loading all artworks...');
+      const allArtworks = await worksService.getAllWorks();
+      console.log(`📊 Loaded ${allArtworks.length} total artworks`);
+      
+      // 3. Filter user's original works (line art they created)
+      const userOriginalWorks = allArtworks.filter(artwork => 
+        artwork.artistId === userId && !artwork.originalWorkId
+      );
+      setUserLineArt(userOriginalWorks);
+      console.log(`🎨 User has ${userOriginalWorks.length} original works`);
+      
+      // 4. Filter user's colorizations/remixes (works they created from others)
+      const userColorizations = allArtworks.filter(artwork => 
         artwork.artistId === userId && artwork.originalWorkId // Works that are derivatives
       );
       setUserColorWork(userColorizations);
+      console.log(`🎨 User has ${userColorizations.length} colorized works`);
+      
+      // 5. Load social data
       console.log('👥 Loading follower data...');
-       if (currentUser && currentUser.id !== userId) {
+      if (currentUser && currentUser.id !== userId) {
         console.log('🔍 Checking if current user follows profile user...');
-         const followingStatus = await socialService.isFollowing(currentUser.id, userId);
-         setIsFollowing(followingStatus);
-         console.log('✅ Follow status:', followingStatus);
-        } else {
-          console.log('ℹ️ Own profile or no current user, skipping follow check');
-        }
-    
-        // Load follower counts
-        console.log('📊 Loading follower counts...');
-        const [followers, following] = await Promise.all([
-          socialService.getFollowerCount(userId),
-          socialService.getFollowingCount(userId)
-        ]);
-        
-        setFollowerCount(followers);
-        setFollowingCount(following);
-        
-        console.log('✅ Profile loaded successfully:', {
-          followers,
-          following,
-          isFollowing: isFollowing
-        });
-        
-      } catch (error) {
-        console.error('💥 Error loading user profile:', error);
-        setLoadFailed(true);
-      } finally {
-        setLoading(false);
+        const followingStatus = await socialService.isFollowing(currentUser.id, userId);
+        setIsFollowing(followingStatus);
+        console.log('✅ Follow status:', followingStatus);
+      } else {
+        console.log('ℹ️ Own profile or no current user, skipping follow check');
       }
-    }, [userId, currentUser]);
+  
+      // 6. Load follower counts
+      console.log('📊 Loading follower counts...');
+      const [followers, following] = await Promise.all([
+        socialService.getFollowerCount(userId),
+        socialService.getFollowingCount(userId)
+      ]);
+      
+      setFollowerCount(followers);
+      setFollowingCount(following);
+      
+      console.log('✅ Profile loaded successfully:', {
+        user: userData.displayName,
+        originalWorks: userOriginalWorks.length,
+        colorizations: userColorizations.length,
+        followers,
+        following,
+        isFollowing
+      });
+      
+    } catch (error) {
+      console.error('💥 Error loading user profile:', error);
+      setLoadFailed(true);
+      showAlert('Error', 'Failed to load profile. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, currentUser]);
 
 
   // Load user profile data with proper cleanup
@@ -135,32 +146,20 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     }
 
     let isMounted = true;
-    const loadTimeout = setTimeout(() => {
-      if (isMounted && loading) {
-        console.log('Profile load timeout - taking too long');
-        setLoading(false);
-      }
-    }, 15000); // 15 second timeout
+   // Load profile without timeout
+  loadUserProfile();
 
-    // Add focus listener
-    
-    const unsubscribe = navigation.addListener('focus', () => {
-      console.log('🔄 Profile screen focused, refreshing data...');
-      // Reload the latest follower data
-      if (isMounted) {
-        console.log('🔄 Profile screen focused, refreshing data...');
-        loadUserProfile();
-      }
-    });
+  const unsubscribe = navigation.addListener('focus', () => {
+    if (isMounted) {
+      loadUserProfile();
+    }
+  });
 
-    return () => {
-      isMounted = false;
-      clearTimeout(loadTimeout);
-      unsubscribe();
-    };
-  }, [ loadUserProfile, navigation]);
-
-
+  return () => {
+    isMounted = false;
+    unsubscribe();
+  };
+}, [userId, navigation, loadUserProfile]);
   
   // Handle Follow Actions
   const handleFollowToggle = async () => {
@@ -238,7 +237,10 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     setShowLogoutModal(false);
     try {
       await signOut();
-      navigation.replace('Gallery');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Gallery' }],
+      });
     } catch (error: any) {
       console.error('❌ Logout error:', error);
       showAlert('Logout Failed', error?.message || 'Please try again.', 'error');
@@ -307,7 +309,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       <View style={styles.authPromptContainer}>
         <Text style={styles.authPromptTitle}>Join the Community! 🎨</Text>
         <Text style={styles.authPromptText}>
-          Sign up to create your own profile, upload line art, and start coloring with others!
+          Sign up to create your own profile, upload your art, and start collaborating with others!
         </Text>
         <TouchableOpacity 
           style={styles.authButton}
@@ -445,7 +447,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         renderItem={({ item }: { item: CreativeWork }) => (
           <TouchableOpacity 
             style={styles.artworkItem}
-            onPress={() => navigation.navigate('ArtworkDetail', { work: item })}
+            onPress={() => navigation.navigate('ArtworkDetail', { workId })}
           >
             <Image source={{ uri: item.assetUrl }} style={styles.artworkImage} />
           </TouchableOpacity>
@@ -471,16 +473,16 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       <View style={styles.emptyState}>
         <Text style={styles.emptyStateText}>
           {isOwnProfile 
-            ? "You haven't colored any artworks yet" 
-            : "No color work yet"
+            ? "You haven't remixed any work yet" 
+            : "No remixes yet"
           }
         </Text>
         {isOwnProfile && (
           <TouchableOpacity 
             style={styles.uploadPrompt}
-            onPress={() => navigation.navigate('Gallery')}
+            onPress={() => navigation.navigate('Gallery', {})}
           >
-            <Text style={styles.uploadPromptText}>Browse Artworks to Color</Text>
+            <Text style={styles.uploadPromptText}>Browse Work to Remix</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -489,45 +491,52 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
   return (
     <FlatList
-      data={userColorWork}
-      numColumns={2}
-      renderItem={({ item }: { item: CreativeWork }) => {
-  
-        return (
-          <TouchableOpacity 
-            style={styles.artworkItem}
-            onPress={() => navigation.navigate('ArtworkDetail', { work: item })}
-          >
-             <RemoteSVG 
-              uri={item.assetUrl}
-              lineArtUrl={item.originalWorkId}
-              width={150}
-              height={150}
+        data={userColorWork}
+        numColumns={2}
+        renderItem={({ item }: { item: CreativeWork }) => {
+          // For color work, we want to show the original artist
+          const originalArtistName = item.originalWorkId 
+            ? 'Unknown Artist' // We could fetch the original work to get the artist
+            : 'Original Artist';
+          
+          return (
+            <TouchableOpacity 
               style={styles.artworkItem}
-          />
-    
-    <View style={styles.colorWorkBadge}>
-      <Text style={styles.colorWorkBadgeText}>Colored by You</Text>
-    </View>
-    
-    <Text style={styles.artworkTitle} numberOfLines={1}>
-      {item.title.replace(' (Colored)', '')}
-    </Text>
-            <Text style={styles.artworkTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.originalArtist}>Original by {item.artist?.displayName || 'Unknown Artist'}</Text>
-            
-            {/* Debug info */}
-            <Text style={styles.debugText} numberOfLines={1}>
-              {item.assetUrl ? 'Has URL' : 'No URL'}
-            </Text>
-          </TouchableOpacity>
-        );
-      }}
-      keyExtractor={(item: CreativeWork) => item.id}
-      contentContainerStyle={styles.galleryGrid}
-    />
-  );
-};
+              onPress={() => navigation.navigate('ArtworkDetail', { workId: item.id })}
+            >
+              {item.assetUrl ? (
+                <Image 
+                  source={{ uri: item.assetUrl }} 
+                  style={styles.artworkImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.placeholderImage}>
+                  <Text style={styles.placeholderText}>No Image</Text>
+                </View>
+              )}
+              
+              <View style={styles.colorWorkBadge}>
+                <Text style={styles.colorWorkBadgeText}>Colored by You</Text>
+              </View>
+              
+              <Text style={styles.artworkTitle} numberOfLines={1}>
+                {item.title.replace(' (Colored)', '')}
+              </Text>
+              
+              {item.originalWorkId && (
+                <Text style={styles.originalArtist} numberOfLines={1}>
+                  Original by {originalArtistName}
+                </Text>
+              )}
+            </TouchableOpacity>
+          );
+        }}
+        keyExtractor={(item: CreativeWork) => item.id}
+        contentContainerStyle={styles.galleryGrid}
+      />
+    );
+  };
 
   const renderActivityTab = () => (
     <View style={styles.emptyState}>
@@ -542,7 +551,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
   return (
     <View style={styles.container}>
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.scrollView}>
       {/* Profile Header */}
       <View style={styles.header}>
         <Image 
@@ -1096,6 +1105,17 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 2,
+  },
+  placeholderImage: {
+    width: '100%',
+    height: 150,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#999',
+    fontSize: 12,
   },
 });
 

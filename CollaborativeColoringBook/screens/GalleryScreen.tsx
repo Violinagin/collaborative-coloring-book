@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -12,13 +12,14 @@ import {
   Modal 
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect  } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { worksService } from '../services/worksService';
 import { socialService } from '../services/socialService';
 import { CreativeWork, MediaType } from '../types/core';
 import { mediaUtils } from '../utils/mediaUtils';
 import { useAuth } from '../context/AuthContext';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 
@@ -28,7 +29,7 @@ const ALL_MEDIA_TYPES: MediaType[] = [
   'writing', 'music', 'animation', 'comic', 'three_d'
 ];
 
-const GalleryScreen = ({ navigation }: Props) => {
+const GalleryScreen = ({ navigation, route }: Props) => {
   const { user } = useAuth();
   const isFocused = useIsFocused();
   const [works, setWorks] = useState<CreativeWork[]>([]);
@@ -42,6 +43,33 @@ const GalleryScreen = ({ navigation }: Props) => {
   const [selectedMediaTypes, setSelectedMediaTypes] = useState<MediaType[]>(ALL_MEDIA_TYPES);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'trending'>('recent');
+  const [tapCount, setTapCount] = useState(0);
+  const [lastTap, setLastTap] = useState(0);
+
+  const handleSecretTap = () => {
+    const now = Date.now();
+    if (now - lastTap < 500) { // Double tap within 500ms
+      setTapCount(prev => prev + 1);
+      if (tapCount >= 2) { // Triple tap
+        navigation.navigate('Debug');
+        setTapCount(0);
+      }
+    } else {
+      setTapCount(1);
+    }
+    setLastTap(now);
+  };  
+
+  useFocusEffect(
+    useCallback(() => {
+      const params = route.params as { showFilterModal?: boolean };
+      if (params?.showFilterModal) {
+        setShowFilterModal(true);
+        // Clear the param after showing modal
+        navigation.setParams({ showFilterModal: undefined });
+      }
+    }, [route.params, navigation])
+  );
 
   const loadWorks = async () => {
     console.log('🚀 === loadWorks START ===', Date.now());
@@ -51,6 +79,7 @@ const GalleryScreen = ({ navigation }: Props) => {
       // Get ALL works (not just colorable)
       const allWorks = await worksService.getAllWorks();
       console.log('📊 Loaded', allWorks.length, 'works total');
+      console.log('☔️First work artist data:', works[0]?.artist);
       
       setWorks(allWorks);
       applyFilters(allWorks, selectedMediaTypes, sortBy);
@@ -216,12 +245,13 @@ const GalleryScreen = ({ navigation }: Props) => {
   const renderWorkItem = ({ item }: { item: CreativeWork }) => {
     const likeInfo = likeData[item.id] || { count: 0, isLiked: false };
     const commentCount = commentData[item.id] || 0;
+    const artistDisplayName = item.artist?.displayName || 'Unknown Artist';
     
     return (
       <TouchableOpacity 
         style={styles.workCard}
         onPress={() => navigation.navigate('ArtworkDetail', { 
-          work: item, })}
+          workId: item.id })}
       >
         <Image 
           source={{ uri: item.assetUrl }} 
@@ -234,7 +264,7 @@ const GalleryScreen = ({ navigation }: Props) => {
           <TouchableOpacity 
             onPress={() => navigation.navigate('Profile', { userId: item.artistId })}
           >
-            <Text style={styles.artist}>by User {item.artistId.slice(0, 8)}</Text>
+            <Text style={styles.artist}>by User {artistDisplayName}</Text>
           </TouchableOpacity>
           
           {item.description && (
@@ -278,7 +308,7 @@ const GalleryScreen = ({ navigation }: Props) => {
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => navigation.navigate('ArtworkDetail', { 
-                work: item, 
+                workId: item?.id, 
                })}
             >
               <Text style={styles.actionText}>💬 {commentCount}</Text>
@@ -401,17 +431,7 @@ const GalleryScreen = ({ navigation }: Props) => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header with filter button */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Creative Universe</Text>
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowFilterModal(true)}
-        >
-          <Text style={styles.filterButtonText}>🔧 Filter</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container} onTouchStart={handleSecretTap}>
       
       {/* Active filters summary */}
       <View style={styles.activeFilters}>
@@ -423,7 +443,7 @@ const GalleryScreen = ({ navigation }: Props) => {
         </Text>
       </View>
       <FlatList
-        data={works}
+        data={filteredWorks}
         renderItem={renderWorkItem}
         keyExtractor={(item: CreativeWork) => item.id}
         contentContainerStyle={styles.gallery}
@@ -460,31 +480,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 20,
-  },
-  filterButtonText: {
-    fontSize: 14,
-    color: '#475569',
   },
   activeFilters: {
     paddingHorizontal: 16,

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { CreativeWork, WorkWithContext } from '../types/core';
+import { CreativeWork, WorkWithContext, User } from '../types/core';
 import { worksService } from '../services/worksService';
 import { socialService } from '../services/socialService'; 
 import LikeButton from '../components/LikeButton';
@@ -30,7 +30,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   
   const { user: currentUser } = useAuth();
-  const { work } = route.params;
+  const { workId } = route.params as any;
   const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -48,7 +48,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   
-const isOwner = currentUser?.id === work?.artistId;
+const isOwner = currentUser?.id === workContext?.work.artistId;
 
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setModalTitle(title);
@@ -63,9 +63,9 @@ const isOwner = currentUser?.id === work?.artistId;
 
   // Load comments function
   const loadComments = async () => {
-    if (!work) return;
+    if (!workId) return;
     try {
-      const workComments = await socialService.getComments(work.id);
+      const workComments = await socialService.getComments(workId);
       setComments(workComments);
     } catch (error) {
       console.error('Error loading comments:', error);
@@ -76,8 +76,8 @@ const isOwner = currentUser?.id === work?.artistId;
     let isMounted = true;
   
   const loadData = async () => {
-    if (isMounted && work) {
-      await loadWorkData(work.id);
+    if (isMounted && workId) {
+      await loadWorkData(workId);
     }
   };
 
@@ -86,15 +86,15 @@ const isOwner = currentUser?.id === work?.artistId;
   return () => {
     isMounted = false;
   };
-}, [work]);
+}, [workId]);
 
   const loadWorkData = async (workId: string) => {
     try {
       setLoading(true);
       
       // Use the new service to get work with full context
-      const context = await worksService.getWorksWithContext(workId);
-      setWorkContext(context);
+      const work = await worksService.getWorkWithContext(workId);
+      setWorkContext(work);
       
       // Load real-time data (likes/comments) - we'll update these services next
       const [likeCount, workComments, liked] = await Promise.all([
@@ -110,19 +110,49 @@ const isOwner = currentUser?.id === work?.artistId;
     } catch (error) {
       console.error('Error loading work data:', error);
       // Fallback to basic work data
-      if (work) {  // ← Change from artworkFromParams to work
-        setWorkContext({
-          work: work,  
-          collaborations: [],
-          artist: { 
-            id: work.artistId,  
-            username: 'unknown',
-            displayName: 'Unknown Artist',
-            roles: [],
-            joinedDate: new Date(),
-          }
-        });
-      }
+       // Fallback to basic work data
+  if (workId) {
+    // Create a minimal fallback work context
+    const fallbackWork: CreativeWork = {
+      id: workId,
+      title: 'Untitled Artwork',
+      description: 'Could not load artwork details',
+      artistId: 'unknown', // We don't know the artist without fetching
+      mediaType: 'line_art',
+      assetUrl: '', // No image URL
+      mediaConfig: { isColorable: true, complexity: 'medium' },
+      originalWorkId: undefined,
+      derivationChain: [],
+      metadata: {},
+      tags: [],
+      visibility: 'public',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const fallbackArtist: User = {
+      id: 'unknown',
+      username: 'unknown',
+      displayName: 'Unknown Artist',
+      avatarUrl: undefined,
+      bio: '',
+      roles: ['supporter'],
+      joinedDate: new Date(),
+    };
+
+    setWorkContext({
+      work: fallbackWork,
+      originalWork: undefined,
+      collaborations: [],
+      artist: fallbackArtist,
+      remixes: [],
+      siblings: []
+    });
+  } else {
+    // No workId at all - show error
+    showAlert('Error', 'Artwork not found');
+    navigation.goBack();
+  }
     } finally {
       setLoading(false);
     }
@@ -208,11 +238,11 @@ const isOwner = currentUser?.id === work?.artistId;
   };
 
   const handleDeleteArtwork = async () => {
-    if (!work) return;
+    if (!workId) return;
     
     setDeletingArtwork(true);
     try {
-      await worksService.deleteWork(work.id);
+      await worksService.deleteWork(workId);
       
       showAlert('Success', 'Artwork deleted successfully', 'success');
       
@@ -230,7 +260,7 @@ const isOwner = currentUser?.id === work?.artistId;
     }
   };
 
-  if (!work) { 
+  if (!workId) { 
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Work not found</Text>
@@ -250,7 +280,7 @@ const isOwner = currentUser?.id === work?.artistId;
   const { work: currentWork, originalWork, collaborations, artist } = workContext;
 
   return (
-    <ScreenErrorBoundary onReset={() => loadWorkData(work.id)}>
+    <ScreenErrorBoundary onReset={() => loadWorkData(workId)}>
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -293,7 +323,7 @@ const isOwner = currentUser?.id === work?.artistId;
         
         {/* Work Info */}
         <View style={styles.infoContainer}>
-          <Text style={styles.title}>{work.title}</Text>
+          <Text style={styles.title}>{workId.title}</Text>
           
           <TouchableOpacity 
   onPress={() => {
@@ -313,15 +343,15 @@ const isOwner = currentUser?.id === work?.artistId;
           {/* Work Type Badge */}
           <View style={styles.workTypeBadge}>
             <Text style={styles.workTypeText}>
-              {mediaUtils.getMediaTypeLabel(work.mediaType)}
+              {mediaUtils.getMediaTypeLabel(workId?.mediaType)}
             </Text>
-            {mediaUtils.isColorable(work) && (
+            {mediaUtils.isColorable(workId) && (
               <Text style={styles.colorableBadge}>🖍️ Colorable</Text>
             )}
           </View>
           
-          {work.description && (
-            <Text style={styles.description}>{work.description}</Text>
+          {workId.description && (
+            <Text style={styles.description}>{workId?.description}</Text>
           )}
           
           {/* Collaboration Chain */}
@@ -329,7 +359,7 @@ const isOwner = currentUser?.id === work?.artistId;
             <View style={styles.collaborationChain}>
               <Text style={styles.chainTitle}>Inspired by:</Text>
               <TouchableOpacity 
-                onPress={() => navigation.navigate('ArtworkDetail', { work: originalWork })}
+                onPress={() => navigation.navigate('ArtworkDetail', { workId: originalWork.id })}
               >
                 <Text style={styles.chainLink}>{originalWork.title}</Text>
               </TouchableOpacity>
@@ -386,15 +416,9 @@ const isOwner = currentUser?.id === work?.artistId;
             } */}
             
             {/* Future: Add other collaboration buttons based on media type */}
-            <TouchableOpacity 
-              style={[styles.button, styles.secondaryButton]}
-              onPress={() => {/* Future: Other collaboration types */}}
-            >
-              <Text style={styles.secondaryButtonText}>✨ Create Derivative</Text>
-            </TouchableOpacity>
             <RemixButton 
-              workId={work.id}
-              workTitle={work.title}
+              workId={workId.id}
+              workTitle={workId.title}
               style={{ marginBottom: 12 }}
             />
           </View>

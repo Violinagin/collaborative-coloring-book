@@ -1,9 +1,11 @@
-import { CreativeWork, RemixType, UploadableMediaType  } from './core'; 
+import { CreativeWork, User  } from './core'; 
 
 export type RootStackParamList = {
-  Gallery: undefined;  
-  ArtworkDetail: { work: CreativeWork };
-  Profile: { userId: string }; 
+  Gallery: { 
+    showFilterModal?: boolean;
+  };  
+  ArtworkDetail: { workId: string };
+  Profile: { userId: string; }; 
 //  Coloring: { artwork: CreativeWork };
   SkiaColoring: { 
     work: CreativeWork;
@@ -18,6 +20,7 @@ export type RootStackParamList = {
     originalWorkId: string;
     originalWorkTitle?: string;
   };
+  Debug: undefined;
   Auth: undefined;
   EditProfile: undefined;
 };

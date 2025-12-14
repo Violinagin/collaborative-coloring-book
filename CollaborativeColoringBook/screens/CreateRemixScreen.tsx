@@ -13,7 +13,7 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { worksService } from '../services/worksService';
 import { useAuth } from '../context/AuthContext';
-import { CreativeWork } from '../types/core';
+import { CreativeWork, WorkWithContext } from '../types/core';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -25,9 +25,11 @@ const CreateRemixScreen = () => {
     const route = useRoute<CreateRemixScreenRouteProp>();
     const navigation = useNavigation<CreateRemixScreenNavigationProp>();
   const { user } = useAuth();
+  
   const { originalWorkId } = route.params as { originalWorkId: string };
   
   const [originalWork, setOriginalWork] = useState<CreativeWork | null>(null);
+  const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ const CreateRemixScreen = () => {
         originalWorkId,
         originalWork
       });
-    };
+    };  
 
   if (loading) {
     return (
@@ -73,6 +75,17 @@ const CreateRemixScreen = () => {
       </View>
     );
   }
+
+  const getArtistDisplayName = () => {
+    if (originalWork.artist?.displayName) {
+      return originalWork.artist.displayName;
+    }
+    
+    // Fallback to artistId if artist data is missing
+    return originalWork.artistId 
+      ? `User ${originalWork.artistId.slice(0, 8)}`
+      : 'Unknown Artist';
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -98,7 +111,7 @@ const CreateRemixScreen = () => {
               {originalWork.title}
             </Text>
             <Text style={styles.originalWorkArtist}>
-              by {originalWork.artist?.displayName || 'Unknown Artist'}
+              by {getArtistDisplayName()}
             </Text>
             <Text style={styles.originalWorkType}>
               {originalWork.mediaType.replace('_', ' ')}

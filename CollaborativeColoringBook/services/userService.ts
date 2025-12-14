@@ -1,6 +1,7 @@
 // services/userService.ts - ULTRA SIMPLIFIED
 import { supabase } from '../lib/supabase';
 import { User } from '../types/core';
+import { transformDatabaseUser, createFallbackUser } from '../utils/userTransformers';
 
 export const userService = {
   async getUser(userId: string): Promise<User> {
@@ -18,51 +19,20 @@ export const userService = {
 
       if (error) {
         console.error('❌ Query error:', error);
-        return this.createFallbackUser(userId);
+        return createFallbackUser(userId);
       }
 
       if (!data) {
         console.log('👤 User not found in database');
-        return this.createFallbackUser(userId);
+        return createFallbackUser(userId);
       }
 
       console.log('✅ User found:', data.username);
-      return this.transformDatabaseUser(data);
+      return transformDatabaseUser(data);
       
     } catch (error) {
       console.error('❌ Unexpected error:', error);
-      return this.createFallbackUser(userId);
+      return createFallbackUser(userId);
     }
-  },
-
-  transformDatabaseUser(dbUser: any): User {
-    return {
-      id: dbUser.id,
-      username: dbUser.username,
-      displayName: dbUser.display_name,
-      avatarUrl: dbUser.avatar_url,
-      bio: dbUser.bio || '',
-      roles: dbUser.roles || ['supporter'],
-      joinedDate: new Date(dbUser.created_at),
-      uploadedArtworks: [],
-      colorizedVersions: [],
-      likedArtworks: [],
-    };
-  },
-
-  createFallbackUser(userId: string): User {
-    console.log('🔄 Creating fallback user for:', userId);
-    return {
-      id: userId,
-      username: `user_${userId.slice(0, 8)}`,
-      displayName: 'New User',
-      avatarUrl: undefined,
-      bio: 'Welcome to the coloring community!',
-      roles: ['supporter'],
-      joinedDate: new Date(),
-      uploadedArtworks: [],
-      colorizedVersions: [],
-      likedArtworks: [],
-    };
   },
 };

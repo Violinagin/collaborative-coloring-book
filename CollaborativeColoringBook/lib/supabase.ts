@@ -13,23 +13,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
     storage: AsyncStorage,
     flowType: 'pkce',
-    debug: true,
+    debug: false,
   },
   global: {
     fetch: (...args) => {
-      console.log('🌐 Supabase Fetch:', {
-        url: args[0],
-        method: args[1]?.method,
-        headers: args[1]?.headers,
-      });
       
       return fetch(...args)
         .then(response => {
-          console.log('🌐 Supabase Response:', {
-            status: response.status,
-            statusText: response.statusText,
-            url: args[0],
-          });
           return response;
         })
         .catch(error => {

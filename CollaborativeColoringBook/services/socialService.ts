@@ -83,8 +83,6 @@ export const socialService = {
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-
-    console.log('💬 Raw comments data:', data);
     
     return data?.map(comment => ({
       id: comment.id,

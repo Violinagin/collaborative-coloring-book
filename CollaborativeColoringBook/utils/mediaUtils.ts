@@ -85,39 +85,49 @@ export const mediaUtils = {
   },
 
   // Get config for a specific media type
-  getMediaTypeConfig(type: MediaType): MediaTypeConfig {
+  getMediaTypeConfig(type: MediaType | undefined | null): MediaTypeConfig {
+    // Handle undefined/null types
+    if (!type) {
+      return this.getFallbackConfig('unknown');
+    }
+    
     const config = MEDIA_TYPE_CONFIGS.find(c => c.value === type);
     if (!config) {
-      // Fallback for unknown types
-      return {
-        value: type,
-        emoji: '🔄',
-        label: type.replace('_', ' '),
-        description: 'Creative work',
-        color: '#6b7280'
-      };
+      return this.getFallbackConfig(type);
     }
     return config;
   },
 
+  // Helper for fallback configs
+  getFallbackConfig(type: string): MediaTypeConfig {
+    const safeType = type || 'unknown';
+    return {
+      value: safeType as MediaType,
+      emoji: '🔄',
+      label: safeType.replace('_', ' ') || 'Unknown',
+      description: 'Creative work',
+      color: '#6b7280'
+    };
+  },
+
   // Get formatted label with emoji
-  getMediaTypeLabel(type: MediaType): string {
+  getMediaTypeLabel(type: MediaType | undefined | null): string {
     const config = this.getMediaTypeConfig(type);
     return `${config.emoji} ${config.label}`;
   },
 
   // Get just the emoji
-  getMediaTypeEmoji(type: MediaType): string {
+  getMediaTypeEmoji(type: MediaType | undefined | null): string {
     return this.getMediaTypeConfig(type).emoji;
   },
 
    // Get description
-  getMediaTypeDescription(type: MediaType): string {
+  getMediaTypeDescription(type: MediaType | undefined | null): string {
     return this.getMediaTypeConfig(type).description;
   },
 
   // Get color
-  getMediaTypeColor(type: MediaType): string {
+  getMediaTypeColor(type: MediaType | undefined | null): string {
     return this.getMediaTypeConfig(type).color;
   },
 
@@ -143,6 +153,7 @@ export const mediaUtils = {
 
   // Check if a work is colorable
   isColorable(work: CreativeWork): boolean {
+    if (!work || !work.mediaType) return false;
     return work.mediaType === 'line_art' || work.mediaType === 'colored_art';
   },
 
