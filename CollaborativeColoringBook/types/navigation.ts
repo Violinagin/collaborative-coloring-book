@@ -14,6 +14,7 @@ export type RootStackParamList = {
   };
   Upload: {
     originalWorkId?: string;
+    originalWorkTitle?: string;
     originalWork?: CreativeWork;
   } | undefined;
   CreateRemix: {

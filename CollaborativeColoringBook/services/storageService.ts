@@ -1,109 +1,18 @@
 // services/storageService.ts
 import { supabase } from '../lib/supabase';
 
+type ServiceResult<T> = {
+  data: T | null;
+  error: string | null;
+  success: boolean;
+};
+
 export const storageService = {
-  async debugStorage(): Promise<void> {
-    console.log('=== STORAGE DEBUG START ===');
-    
-    try {
-      // 1. Check Supabase client
-      console.log('1. Checking Supabase client...');
-      console.log('Supabase object:', supabase);
-      console.log('Has storage?', !!supabase.storage);
-      console.log('Has auth?', !!supabase.auth);
-      
-      if (!supabase.storage) {
-        throw new Error('Supabase storage not initialized');
-      }
-      
-      // 2. Check authentication
-      console.log('2. Checking authentication...');
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      
-      if (authError) {
-        console.error('❌ Auth error:', authError);
-      } else {
-        console.log('✅ Auth session:', authData.session ? 'Exists' : 'None');
-        if (authData.session) {
-          console.log('   User ID:', authData.session.user.id);
-        }
-      }
-      
-      // 3. List buckets
-      console.log('3. Listing storage buckets...');
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      
-      if (bucketError) {
-        console.error('❌ Bucket list error:', bucketError);
-        console.error('   Message:', bucketError.message);
-        console.error('   Details:', bucketError);
-      } else {
-        console.log('✅ Available buckets:', buckets.map(b => b.name));
-        
-        // 4. Check artworks bucket
-        const hasArtworks = buckets.some(b => b.name === 'artworks');
-        console.log(hasArtworks ? '✅ Found "artworks" bucket' : '❌ Missing "artworks" bucket');
-        
-        if (hasArtworks) {
-          // 5. Try to list files in artworks bucket
-          console.log('4. Checking "artworks" bucket contents...');
-          const { data: files, error: filesError } = await supabase.storage
-            .from('artworks')
-            .list();
-          
-          if (filesError) {
-            console.error('❌ File list error:', filesError);
-          } else {
-            console.log(`✅ Bucket has ${files.length} files`);
-          }
-        }
-      }
-      
-      // 6. Test file upload (if authenticated)
-      if (authData?.session) {
-        console.log('5. Testing upload...');
-        const testBlob = new Blob(['test'], { type: 'text/plain' });
-        const testPath = `test_${Date.now()}.txt`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('artworks')
-          .upload(testPath, testBlob, {
-            contentType: 'text/plain',
-            upsert: false
-          });
-        
-        if (uploadError) {
-          console.error('❌ Upload test failed:', uploadError);
-          console.error('   Error details:', {
-            message: uploadError.message,
-            name: uploadError.name,
-            statusCode: uploadError
-          });
-        } else {
-          console.log('✅ Upload test successful:', uploadData);
-          
-          // Clean up
-          await supabase.storage
-            .from('artworks')
-            .remove([testPath]);
-          console.log('✅ Test file cleaned up');
-        }
-      } else {
-        console.log('ℹ️ Skipping upload test - not authenticated');
-      }
-      
-    } catch (error: any) {
-      console.error('💥 Debug error:', error);
-      console.error('   Stack:', error.stack);
-    }
-    
-    console.log('=== STORAGE DEBUG END ===');
-  },
   async uploadArtworkImage(
     fileUri: string, 
     userId: string,
     onProgress?: (progress: number) => void
-  ): Promise<string> {
+  ): Promise<ServiceResult<string>> {
     try {
       console.log('📤 Uploading image to storage...');
 
@@ -179,12 +88,35 @@ export const storageService = {
         .getPublicUrl(fileName);
       
       console.log('✅ Image uploaded to:', urlData.publicUrl);
-      return urlData.publicUrl;
+      return {
+        success: true,
+        data: urlData.publicUrl,
+        error: null
+      };
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('💥 Image upload failed:', error);
-      throw error;
-    }
+      let errorMessage = 'Failed to upload image';
+  
+  // Check if it's an Error object
+  if (error instanceof Error) {
+    errorMessage = error.message;
+  } 
+  // Check if it's a string
+  else if (typeof error === 'string') {
+    errorMessage = error;
+  }
+  // Check if it has a message property
+  else if (error && typeof error === 'object' && 'message' in error) {
+    errorMessage = String((error as any).message);
+  }
+  
+  return {
+    success: false,
+    data: null,
+    error: errorMessage
+  };
+}
   },
 
   async validateImageBlob(blob: Blob, fileUri: string): Promise<void> {

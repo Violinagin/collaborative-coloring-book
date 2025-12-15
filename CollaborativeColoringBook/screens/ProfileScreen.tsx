@@ -9,25 +9,27 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { User, UserRole, CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
-import RemoteSVG from '../components/RemoteSVG';
 import { worksService } from '../services/worksService'; 
 import { userService } from '../services/userService';
 import { socialService } from '../services/socialService';
 import { AlertModal } from '../components/AlertModal';
+import { mediaUtils } from '../utils/mediaUtils';
+import MediaTypeBadge from '../components/MediaTypeBadge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 const ProfileScreen = ({ route, navigation }: Props) => {
-  const [activeTab, setActiveTab] = useState<'lineArt' | 'colorWork' | 'activity'>('lineArt');
+  const [activeTab, setActiveTab] = useState<'originals' | 'remixes' | 'activity'>('originals');
   const { user: currentUser, signOut } = useAuth();
-  const { workId } = route.params as any;
   const [profileUser, setProfileUser] = useState<User | null>(null);
-  const [userLineArt, setUserLineArt] = useState<CreativeWork[]>([]);
+  const [userOriginals, setUserOriginals] = useState<CreativeWork[]>([]);
+  const { workId } = route.params as any;
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -35,11 +37,12 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
-  const [userColorWork, setUserColorWork] = useState<CreativeWork[]>([]);
+  const [userRemixes, setUserRemixes] = useState<CreativeWork[]>([]);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
+  const [refreshing, setRefreshing] = useState(false);
 
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setAlertTitle(title);
@@ -69,6 +72,9 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     try {
       setLoading(true);
       setLoadFailed(false);
+      setProfileUser(null); // Reset
+      setUserOriginals([]);
+      setUserRemixes([]);
 
       console.log('🔍 Loading profile for user:', userId);
       
@@ -78,62 +84,64 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       console.log('✅ User data loaded:', userData.displayName);
       
       // 2. Load ALL artworks once
+      let allArtworks: CreativeWork[] = [];
+    try {
       console.log('🖼️ Loading all artworks...');
-      const allArtworks = await worksService.getAllWorks();
+      allArtworks = await worksService.getAllWorks();
       console.log(`📊 Loaded ${allArtworks.length} total artworks`);
+    } catch (artError) {
+      console.warn('⚠️ Could not load artworks, continuing with empty list:', artError);
+      // Continue with empty array instead of failing entire profile load
+      allArtworks = [];
+    }
       
-      // 3. Filter user's original works (line art they created)
+      // 3. Filter works 
       const userOriginalWorks = allArtworks.filter(artwork => 
         artwork.artistId === userId && !artwork.originalWorkId
       );
-      setUserLineArt(userOriginalWorks);
+      setUserOriginals(userOriginalWorks);
       console.log(`🎨 User has ${userOriginalWorks.length} original works`);
-      
-      // 4. Filter user's colorizations/remixes (works they created from others)
-      const userColorizations = allArtworks.filter(artwork => 
-        artwork.artistId === userId && artwork.originalWorkId // Works that are derivatives
+
+      const userRemixes = allArtworks.filter(artwork => 
+        artwork.artistId === userId && artwork.originalWorkId
       );
-      setUserColorWork(userColorizations);
-      console.log(`🎨 User has ${userColorizations.length} colorized works`);
+      setUserRemixes(userRemixes);
       
-      // 5. Load social data
-      console.log('👥 Loading follower data...');
-      if (currentUser && currentUser.id !== userId) {
-        console.log('🔍 Checking if current user follows profile user...');
-        const followingStatus = await socialService.isFollowing(currentUser.id, userId);
-        setIsFollowing(followingStatus);
-        console.log('✅ Follow status:', followingStatus);
-      } else {
-        console.log('ℹ️ Own profile or no current user, skipping follow check');
+      // 4. Load social data - can fail independently
+      try {
+        console.log('👥 Loading follower data...');
+        if (currentUser && currentUser.id !== userId) {
+          const followingStatus = await socialService.isFollowing(currentUser.id, userId);
+          setIsFollowing(followingStatus);
+        }
+        
+        // Load counts
+        const [followers, following] = await Promise.all([
+          socialService.getFollowerCount(userId),
+          socialService.getFollowingCount(userId)
+        ]);
+        
+        setFollowerCount(followers);
+        setFollowingCount(following);
+      } catch (socialError) {
+        console.warn('⚠️ Social data failed to load:', socialError);
+        // Keep default/previous values
       }
-  
-      // 6. Load follower counts
-      console.log('📊 Loading follower counts...');
-      const [followers, following] = await Promise.all([
-        socialService.getFollowerCount(userId),
-        socialService.getFollowingCount(userId)
-      ]);
-      
-      setFollowerCount(followers);
-      setFollowingCount(following);
-      
-      console.log('✅ Profile loaded successfully:', {
-        user: userData.displayName,
-        originalWorks: userOriginalWorks.length,
-        colorizations: userColorizations.length,
-        followers,
-        following,
-        isFollowing
-      });
       
     } catch (error) {
-      console.error('💥 Error loading user profile:', error);
+      console.error('💥 Critical error loading profile:', error);
       setLoadFailed(true);
-      showAlert('Error', 'Failed to load profile. Please try again.', 'error');
+      showAlert('Error', 'Failed to load user profile. The user may not exist.', 'error');
     } finally {
       setLoading(false);
     }
   }, [userId, currentUser]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadUserProfile();
+    setRefreshing(false);
+  }, [loadUserProfile]);
 
 
   // Load user profile data with proper cleanup
@@ -163,69 +171,53 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   
   // Handle Follow Actions
   const handleFollowToggle = async () => {
-    if (!currentUser) {
-      navigation.navigate('Auth');
-      return;
-    }
-  
-    if (!profileUser) return;
-  
+    if (!currentUser || !profileUser) return;
+    
+    if (currentUser.id === profileUser.id) return; // Can't follow yourself
+    
     setFollowLoading(true);
-  try {
-    console.log('👥 Toggling follow:', { 
-      currentUser: currentUser.id, 
-      profileUser: profileUser.id,
-      currentlyFollowing: isFollowing 
-    });
     
-    if (isFollowing) {
-      // Unfollow
-      console.log('🔄 Unfollowing user...');
-      const success = await socialService.unfollowUser(currentUser.id, profileUser.id);
-      if (success) {
-        setIsFollowing(false);
-        setFollowerCount(prev => Math.max(0, prev - 1));
-        console.log('✅ Successfully unfollowed user');
-      }
-    } else {
-      // Follow
-      console.log('🔄 Following user...');
-      const success = await socialService.followUser(currentUser.id, profileUser.id);
-      if (success) {
-        setIsFollowing(true);
-        setFollowerCount(prev => prev + 1);
-        console.log('✅ Successfully followed user');
-      }
-    }
-  } catch (error: any) {
-    console.error('❌ Error toggling follow:', error);
+    // Save current state for rollback
+    const wasFollowing = isFollowing;
+    const oldFollowerCount = followerCount;
     
-    // Handle the unique constraint error gracefully
-    if (error.code === '23505') {
-      console.log('ℹ️ Already following, updating UI state');
-      setIsFollowing(true);
-      // Refresh the actual count to be safe
-      const actualCount = await socialService.getFollowerCount(profileUser.id);
-      setFollowerCount(actualCount);
-    } else {
-      showAlert('Error', 'Failed to update follow status. Please try again.');
-      
-      // Only revert for non-duplicate errors
-      try {
-        console.log('🔄 Reverting optimistic update due to error');
-        const currentStatus = await socialService.isFollowing(currentUser.id, profileUser.id);
-        setIsFollowing(currentStatus);
+    // Optimistic update
+    setIsFollowing(!wasFollowing);
+    setFollowerCount(wasFollowing ? oldFollowerCount - 1 : oldFollowerCount + 1);
+    
+    try {
+      if (wasFollowing) {
+        // Unfollow
+        const result = await socialService.unfollowUser(currentUser.id, profileUser.id);
         
-        const actualCount = await socialService.getFollowerCount(profileUser.id);
-        setFollowerCount(actualCount);
-      } catch (revertError) {
-        console.error('❌ Error reverting optimistic update:', revertError);
+        if (!result.success) {
+          // Service failed - rollback
+          setIsFollowing(wasFollowing);
+          setFollowerCount(oldFollowerCount);
+          showAlert('Error', result.error || 'Failed to unfollow', 'error');
+        }
+      } else {
+        // Follow
+        const result = await socialService.followUser(currentUser.id, profileUser.id);
+        
+        if (!result.success) {
+          // Service failed - rollback
+          setIsFollowing(wasFollowing);
+          setFollowerCount(oldFollowerCount);
+          showAlert('Error', result.error || 'Failed to follow', 'error');
+        }
       }
+      
+    } catch (error) {
+      console.error('❌ Unexpected error toggling follow:', error);
+      // Rollback on unexpected error
+      setIsFollowing(wasFollowing);
+      setFollowerCount(oldFollowerCount);
+      showAlert('Error', 'An unexpected error occurred', 'error');
+    } finally {
+      setFollowLoading(false);
     }
-  } finally {
-    setFollowLoading(false);
-  }
-};
+  };
 
   // Handle logout
   const handleLogoutPress = () => {
@@ -418,14 +410,14 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     }
   };
 
-  const renderLineArtTab = () => {
-    if (userLineArt.length === 0) {
+  const renderOriginalsTab = () => {
+    if (userOriginals.length === 0) {
       return (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>
             {isOwnProfile 
-              ? "You haven't uploaded any line art yet" 
-              : "No line art uploaded yet"
+              ? "You haven't uploaded any oringial works yet!" 
+              : "No original works uploaded yet"
             }
           </Text>
           {isOwnProfile && (
@@ -433,7 +425,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
               style={styles.uploadPrompt}
               onPress={() => navigation.navigate('Upload')}
             >
-              <Text style={styles.uploadPromptText}>Upload Your First Artwork</Text>
+              <Text style={styles.uploadPromptText}>Create Your First Original</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -442,12 +434,12 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
     return (
       <FlatList
-        data={userLineArt}
+        data={userOriginals}
         numColumns={2}
         renderItem={({ item }: { item: CreativeWork }) => (
           <TouchableOpacity 
             style={styles.artworkItem}
-            onPress={() => navigation.navigate('ArtworkDetail', { workId })}
+            onPress={() => navigation.navigate('ArtworkDetail', { workId: item.id })}
           >
             <Image source={{ uri: item.assetUrl }} style={styles.artworkImage} />
           </TouchableOpacity>
@@ -458,17 +450,10 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     );
   };
 
-  const renderColorWorkTab = () => {
-  userColorWork.forEach((item, index) => {
-    
-    if (item.assetUrl) {
-
-    } else {
-      console.log('❌ NO URL FOUND');
-    }
-  });
+  const renderRemixesTab = () => {
+    console.log(`🔄 Rendering ${userRemixes.length} remixes`);
   
-  if (userColorWork.length === 0) {
+  if (userRemixes.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyStateText}>
@@ -491,13 +476,17 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
   return (
     <FlatList
-        data={userColorWork}
+        data={userRemixes}
         numColumns={2}
         renderItem={({ item }: { item: CreativeWork }) => {
-          // For color work, we want to show the original artist
-          const originalArtistName = item.originalWorkId 
-            ? 'Unknown Artist' // We could fetch the original work to get the artist
-            : 'Original Artist';
+          // Remix badge should show what type of remix it is
+          const getRemixType = () => {
+            // Use mediaUtils for consistent labels
+            return mediaUtils.getMediaTypeLabel(item.mediaType);
+          };
+           const originalArtistName = item.originalWorkId 
+             ? 'Unknown Artist' // We could fetch the original work to get the artist
+             : 'Original Artist';
           
           return (
             <TouchableOpacity 
@@ -515,17 +504,23 @@ const ProfileScreen = ({ route, navigation }: Props) => {
                   <Text style={styles.placeholderText}>No Image</Text>
                 </View>
               )}
-              
-              <View style={styles.colorWorkBadge}>
-                <Text style={styles.colorWorkBadgeText}>Colored by You</Text>
+
+              <View style={styles.remixBadge}>
+                <MediaTypeBadge 
+                  mediaType={item.mediaType}
+                  size="xsmall"
+                  showLabel={false}
+                  variant="default"
+                />
+                <Text style={styles.remixBadgeText}></Text>
               </View>
               
               <Text style={styles.artworkTitle} numberOfLines={1}>
-                {item.title.replace(' (Colored)', '')}
+                {item.title}
               </Text>
               
               {item.originalWorkId && (
-                <Text style={styles.originalArtist} numberOfLines={1}>
+                <Text style={styles.remixInfo} numberOfLines={1}>
                   Original by {originalArtistName}
                 </Text>
               )}
@@ -542,16 +537,32 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     <View style={styles.emptyState}>
       <Text style={styles.emptyStateText}>
         {isOwnProfile 
-          ? "Your activity feed will appear here" 
+          ? "Your activity feed will show likes, comments, and follows" 
           : "Activity feed coming soon"
         }
       </Text>
+      {isOwnProfile && (
+        <TouchableOpacity 
+          style={styles.uploadPrompt}
+          onPress={() => navigation.navigate('Gallery', {})}
+        >
+          <Text style={styles.uploadPromptText}>Explore the community</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
   return (
     <View style={styles.container}>
-    <ScrollView style={styles.scrollView}>
+    <ScrollView style={styles.scrollView}
+     refreshControl={
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        colors={['#007AFF']}
+    />
+    }
+  >
       {/* Profile Header */}
       <View style={styles.header}>
         <Image 
@@ -575,13 +586,13 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       {/* Stats Bar */}
       <View style={styles.statsBar}>
         <View style={styles.stat}>
-          <Text style={styles.statNumber}>{userLineArt.length}</Text>
-          <Text style={styles.statLabel}>Artworks</Text>
+          <Text style={styles.statNumber}>{userOriginals.length}</Text>
+          <Text style={styles.statLabel}>Originals</Text>
         </View>
-        {/* <View style={styles.stat}>
-          <Text style={styles.statNumber}>{user.colorizedVersions?.length || 0}</Text>
-          <Text style={styles.statLabel}>Colorizations</Text>
-        </View> */}
+        <View style={styles.stat}>
+            <Text style={styles.statNumber}>{userRemixes.length}</Text>
+            <Text style={styles.statLabel}>Remixes</Text>
+        </View>
         <View style={styles.stat}>
           <Text style={styles.statNumber}>{followerCount}</Text>
           <Text style={styles.statLabel}>Followers</Text>
@@ -595,19 +606,19 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'lineArt' && styles.activeTab]}
-          onPress={() => setActiveTab('lineArt')}
+          style={[styles.tab, activeTab === 'originals' && styles.activeTab]}
+          onPress={() => setActiveTab('originals')}
         >
-          <Text style={[styles.tabText, activeTab === 'lineArt' && styles.activeTabText]}>
-            Line Art
+          <Text style={[styles.tabText, activeTab === 'originals' && styles.activeTabText]}>
+            Originals
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'colorWork' && styles.activeTab]}
-          onPress={() => setActiveTab('colorWork')}
+          style={[styles.tab, activeTab === 'remixes' && styles.activeTab]}
+          onPress={() => setActiveTab('remixes')}
         >
-          <Text style={[styles.tabText, activeTab === 'colorWork' && styles.activeTabText]}>
-            Color Work
+          <Text style={[styles.tabText, activeTab === 'remixes' && styles.activeTabText]}>
+            Remixes
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -622,8 +633,8 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
       {/* Tab Content */}
       <View style={styles.tabContent}>
-        {activeTab === 'lineArt' && renderLineArtTab()}
-        {activeTab === 'colorWork' && renderColorWorkTab()}
+        {activeTab === 'originals' && renderOriginalsTab()}
+        {activeTab === 'remixes' && renderRemixesTab()}
         {activeTab === 'activity' && renderActivityTab()}
       </View>
     </ScrollView>
@@ -1116,6 +1127,43 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#999',
     fontSize: 12,
+  },
+  remixBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(124, 58, 237, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  remixBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  remixInfo: {
+    fontSize: 10,
+    color: '#666',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    fontStyle: 'italic',
+  },
+  artworkType: {
+    fontSize: 10,
+    color: '#666',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  artworkInfoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 4,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
   },
 });
 

@@ -10,698 +10,648 @@ import {
   ScrollView,
   ActivityIndicator
 } from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import { RootStackParamList } from '../types/navigation';
 import { worksService } from '../services/worksService';
-import { useAuth } from '../context/AuthContext';
-import { UploadableMediaType, CreativeWork, UploadWork, DerivativeWorkData, RemixType } from '../types/core';
-import { AlertModal } from '../components/AlertModal';
 import { storageService } from '../services/storageService';
+import { useAuth } from '../context/AuthContext';
+import { UploadableMediaType, CreativeWork, UploadWork, DerivativeWorkData, RemixType, LineArtConfig, ColoredArtConfig, DigitalArtConfig} from '../types/core';
+import { AlertModal } from '../components/AlertModal';
 import { useRoute } from '@react-navigation/native';
-import { MediaType } from '../types/core';
 import { mediaUtils, UploadableMediaTypeConfig } from '../utils/mediaUtils';
 
-interface RouteParams {
-  originalWorkId?: string;
-  originalWork?: CreativeWork;
-  remixType?: RemixType;
-  suggestedMediaType?: string;
-}
 
-const UploadScreen = () => {
+type Props = NativeStackScreenProps<RootStackParamList, 'Upload'>;
+
+// interface RouteParams {
+//   originalWorkId?: string;
+//   originalWork?: CreativeWork;
+//   remixType?: RemixType;
+//   suggestedMediaType?: string;
+// }
+
+const UploadScreen = ({ navigation, route }: Props) => {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const route = useRoute();
-  const params = route.params as {
-    originalWorkId?: string;
-    originalWork?: CreativeWork;
-  } || {};
-  const [mediaType, setMediaType] = useState<UploadableMediaType>('line_art');
-  const isRemix = !!params.originalWorkId;
-  const originalWork = params.originalWork;
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedMediaType, setSelectedMediaType] = useState('digital_art');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private' | 'unlisted'>('public');
+
+  //const route = useRoute();
+  // const params = route.params as {
+  //   originalWorkId?: string;
+  //   originalWork?: CreativeWork;
+  // } || {};
+  //const [mediaType, setMediaType] = useState<UploadableMediaType>('line_art');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [createdWorkId, setCreatedWorkId] = useState<string | null>(null);
+
+  // For remixes (if coming from Gallery)
+  const isRemix = route.params?.originalWorkId;
+  const originalWorkId = route.params?.originalWorkId;
+  const originalWorkTitle = route.params?.originalWorkTitle;
+  
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showProgress, setShowProgress] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
-  const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
   const UPLOADABLE_MEDIA_TYPES = mediaUtils.getUploadableMediaTypeConfigs();
   
-  
-  
-  
-  const createUploadWorkData = (
-    title: string,
-    description: string,
-    storageImageUrl: string,
-    mediaType: UploadableMediaType
-  ): UploadWork => {
-    const base = {
-      title: title.trim(),
-      description: description.trim(),
-      assetUrl: storageImageUrl,
-      originalWorkId: undefined as string | undefined,
-      tags: [] as string[],
-      visibility: 'public' as const,
-      mediaType: mediaType,
-    };
-  
-    // Create objects with exact types first, then cast
-    if (mediaType === 'line_art') {
-      const lineArtWork = {
-        ...base,
-        mediaType: 'line_art' as const,
-        mediaConfig: {
-          isColorable: true,
-          complexity: 'medium' as const
-        }
-      };
-      // Cast to the specific union member
-      return lineArtWork as typeof lineArtWork & UploadWork;
-    }
-    
-    if (mediaType === 'colored_art') {
-      const coloredArtWork = {
-        ...base,
-        mediaType: 'colored_art' as const,
-        mediaConfig: {
-          isColorable: true,
-          technique: 'flat' as const,
-          complexity: 'medium' as const
-        }
-      };
-      return coloredArtWork as typeof coloredArtWork & UploadWork;
-    }
-    
-    // digital_art
-    const digitalArtWork = {
-      ...base,
-      mediaType: 'digital_art' as const,
-      mediaConfig: {
-        isColorable: false,
-        style: 'painting' as const
-      }
-    };
-    return digitalArtWork as typeof digitalArtWork & UploadWork;
-  };
-
-  const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalType(type);
-    setModalVisible(true);
-  };
-
-  const hideModal = () => {
-    setModalVisible(false);
-  };
-
+  // ==================== IMAGE PICKER ====================
   const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: .8,
-      });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
 
-      if (!result.canceled) {
-        const selectedUri = result.assets[0].uri;
-      setImageUri(selectedUri);
-      console.log('✅ Image selected:', selectedUri);
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
     }
-  } catch (error) {
-    console.error('❌ Error picking image:', error);
-    showModal('Error', 'Failed to select image. Please try again.', 'error');
-  }
-};
+  };
+  
+  // ==================== TAG HANDLING ====================
+  const addTag = () => {
+    const trimmedTag = tagInput.trim();
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      setTags([...tags, trimmedTag]);
+      setTagInput('');
+    }
+  };
 
-  // Form validation
-  const validateForm = (): string | null => {
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  // ==================== VALIDATION ====================
+  const validateForm = () => {
     if (!title.trim()) {
-      return 'Please enter a title for your artwork';
-    }
-    
-    if (title.trim().length < 2) {
-      return 'Title must be at least 2 characters long';
-    }
-    
-    if (title.trim().length > 100) {
-      return 'Title must be less than 100 characters';
-    }
-    
-    if (description.trim().length > 500) {
-      return 'Description must be less than 500 characters';
+      setModalMessage('Please enter a title for your artwork');
+      setShowErrorModal(true);
+      return false;
     }
     
     if (!imageUri) {
-      return 'Please select an image';
+      setModalMessage('Please select an image to upload');
+      setShowErrorModal(true);
+      return false;
     }
     
-    return null; // No errors
+    return true;
   };
 
-
+  // ==================== UPLOAD FUNCTION ====================
   const handleUpload = async () => {
-    
-    if (!user) {
-      showModal('Error', 'Please log in to upload works', 'error');
+    // 1. Validate form
+    if (!validateForm() || !imageUri) {
+      // validateForm already shows error if imageUri is null
       return;
     }
-     // Validate form
-     const validationError = validateForm();
-     if (validationError) {
-       showModal('Validation Error', validationError, 'error');
-       return;
-     }
-  
+
     setUploading(true);
-    setShowProgress(true);
-    setUploadProgress(0);
-
-
     
     try {
-      console.log('🚀 Starting upload flow for user:', user.id);
+      let finalImageUrl = imageUri; // Now TypeScript knows imageUri is string
       
-      // Upload with Progress
-      console.log('📤 Step 1: Uploading image to storage...');
-      const storageImageUrl = await storageService.uploadArtworkImage(
-        imageUri!, 
-        user.id,
-        (progress) => {
-          setUploadProgress(progress);
+      const isLocalAsset = imageUri && (
+        imageUri.startsWith('file://') || 
+        imageUri.startsWith('blob:') || 
+        imageUri.includes('localhost:8081')
+      );
+      
+      if (isLocalAsset) {
+        console.log('📤 NEEDS UPLOAD: Local/blob asset detected');
+        console.log('📤 Calling storageService.uploadArtworkImage...');
+        
+        const uploadResult = await storageService.uploadArtworkImage(
+          imageUri,
+          `artwork_${Date.now()}_${title.replace(/\s+/g, '_')}.jpg`
+        );
+
+        console.log('📤 storageService returned:', uploadResult);
+        
+        if (!uploadResult.success) {
+          // Image upload failed
+          console.error('❌ storageService failed:', uploadResult.error);
+          setModalMessage(uploadResult.error || 'Failed to upload image to cloud storage');
+          setShowErrorModal(true);
+          setUploading(false);
+          return;
         }
-      );
+        
+        finalImageUrl = uploadResult.data!;
+        console.log('✅ Image uploaded to:', finalImageUrl);
+      }
+
+      // 4. Prepare work data
+      const workData = {
+        title: title.trim(),
+        description: description.trim(),
+        assetUrl: finalImageUrl,
+        originalWorkId: isRemix ? originalWorkId : undefined,
+        tags: tags,
+        visibility: visibility,
+        mediaType: selectedMediaType as any, // Your UploadableMediaType
+        mediaConfig: {},
+      };
+
+      console.log('🎨 Creating work record in database...');
+
+      // 5. Create work in database
+      let result;
       
-      console.log('✅ Image uploaded to storage:', storageImageUrl);
-
-      const workData: UploadWork = createUploadWorkData(
-        title,
-        description,
-        storageImageUrl,
-        mediaType
-      );
-
-      let createdWork: CreativeWork;
-    
-      if (isRemix && originalWork) {
-        // Create as remix
-        const remixData: DerivativeWorkData = {
+      if (isRemix && originalWorkId) {
+        // It's a remix
+        const remixData = {
           ...workData,
-          originalWorkId: originalWork.id,
-          remixType: 'remix',
-          attribution: `Inspired by "${originalWork.title}" by ${originalWork.artist?.displayName}`
+          originalWorkId: originalWorkId,
+          remixType: 'remix' as const,
+          attribution: `Remix of "${originalWorkTitle || 'original work'}"`
         };
-        createdWork = await worksService.createRemix(remixData);
+        
+        result = await worksService.createRemix(remixData);
       } else {
-        // Create as original work
-        createdWork = await worksService.createWork(workData);
+        // It's an original work
+        result = await worksService.createWork(workData);
+      }
+
+      // 6. Handle the result
+      if (result.success && result.data) {
+        // SUCCESS! 🎉
+        console.log('🔍 FINAL URL TO SAVE:', finalImageUrl);
+  console.log('Valid Supabase URL?', 
+    finalImageUrl?.includes('supabase.co') || 
+    finalImageUrl?.includes('supabase.in') ||
+    finalImageUrl?.includes('storage.googleapis.com')
+  );
+        const createdWork = result.data;
+        setCreatedWorkId(createdWork.id);
+        setModalMessage(`"${createdWork.title}" was created successfully!`);
+        setShowSuccessModal(true);
+        console.log('✅ Work created with ID:', createdWork.id);
+      } else {
+        // ERROR from service
+        setModalMessage(result.error || 'Failed to save artwork to database');
+        setShowErrorModal(true);
+        console.error('❌ Service error:', result.error);
+        
+        // Optional: Try to delete the uploaded image since work creation failed
+        if (finalImageUrl && finalImageUrl !== imageUri) {
+          try {
+            await storageService.deleteArtworkImage(finalImageUrl);
+            console.log('🔄 Cleaned up uploaded image');
+          } catch (cleanupError) {
+            console.warn('⚠️ Could not cleanup image:', cleanupError);
+          }
+        }
+      }
       
-      console.log('📦 Work data being created:', workData);
+    } catch (error) {
+      // 7. Handle unexpected errors
+      console.error('💥 Unexpected error in upload process:', error);
+      setModalMessage('An unexpected error occurred. Please try again.');
+      setShowErrorModal(true);
+    } finally {
+      // 8. Always stop loading
+      setUploading(false);
+    }
+  };
+
+  // ==================== MODAL HANDLERS ====================
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    
+    if (createdWorkId) {
+      // Navigate to the newly created artwork
+      navigation.navigate('ArtworkDetail', { workId: createdWorkId });
       
-      // Use worksService to create the work record
-      
-      console.log('🎉 Work created successfully!');
-      console.log('🆔 Work ID:', createdWork.id);
-      console.log('🖼️ Work assetUrl:', createdWork.assetUrl);
-  
-      showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
-      
-      // Reset form on success
+      // Optional: Clear the form for next upload
       setTitle('');
       setDescription('');
       setImageUri(null);
-      setMediaType('line_art');
-      
-    }
-
-      
-    } catch (error: any) {
-      console.error('💥 Upload failed:', error);
-      const errorMessage = error?.message || 'Please try again.';
-      showModal('Upload Failed', `Failed to upload artwork: ${errorMessage}`, 'error');
-    } finally {
-      setUploading(false);
-      setShowProgress(false);
-      setUploadProgress(0);
+      setTags([]);
+      setTagInput('');
     }
   };
 
+  const handleErrorModalClose = () => {
+    setShowErrorModal(false);
+    // Don't clear form on error - user might want to fix and retry
+  };
+  
+  // const createUploadWorkData = (
+  //   title: string,
+  //   description: string,
+  //   storageImageUrl: string,
+  //   mediaType: UploadableMediaType
+  // ): UploadWork => {
+  //   const base = {
+  //     title: title.trim(),
+  //     description: description.trim(),
+  //     assetUrl: storageImageUrl,
+  //     originalWorkId: undefined as string | undefined,
+  //     tags: [] as string[],
+  //     visibility: 'public' as const,
+  //     mediaType: mediaType,
+  //   };
+  
+  //   // Create objects with exact types first, then cast
+  //   if (mediaType === 'line_art') {
+  //     const lineArtWork = {
+  //       ...base,
+  //       mediaType: 'line_art' as const,
+  //       mediaConfig: {
+  //         isColorable: true,
+  //         complexity: 'medium' as const
+  //       }
+  //     };
+  //     // Cast to the specific union member
+  //     return lineArtWork as typeof lineArtWork & UploadWork;
+  //   }
+    
+  //   if (mediaType === 'colored_art') {
+  //     const coloredArtWork = {
+  //       ...base,
+  //       mediaType: 'colored_art' as const,
+  //       mediaConfig: {
+  //         isColorable: true,
+  //         technique: 'flat' as const,
+  //         complexity: 'medium' as const
+  //       }
+  //     };
+  //     return coloredArtWork as typeof coloredArtWork & UploadWork;
+  //   }
+    
+  //   // digital_art
+  //   const digitalArtWork = {
+  //     ...base,
+  //     mediaType: 'digital_art' as const,
+  //     mediaConfig: {
+  //       isColorable: false,
+  //       style: 'painting' as const
+  //     }
+  //   };
+  //   return digitalArtWork as typeof digitalArtWork & UploadWork;
+  // };
+
+  // const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  //   setModalTitle(title);
+  //   setModalMessage(message);
+  //   setModalType(type);
+  //   setModalVisible(true);
+  // };
+
+  // const hideModal = () => {
+  //   setModalVisible(false);
+  // };
+
+  // const handleUpload = async () => {
+    
+  //   if (!user) {
+  //     showModal('Error', 'Please log in to upload works', 'error');
+  //     return;
+  //   }
+  //    // Validate form
+  //    const validationError = validateForm();
+  //    if (validationError) {
+  //      showModal('Validation Error', validationError, 'error');
+  //      return;
+  //    }
+  
+  //   setUploading(true);
+  //   setShowProgress(true);
+  //   setUploadProgress(0);
+
+
+    
+  //   try {
+  //     console.log('🚀 Starting upload flow for user:', user.id);
+      
+  //     // Upload with Progress
+  //     console.log('📤 Step 1: Uploading image to storage...');
+  //     const storageImageUrl = await storageService.uploadArtworkImage(
+  //       imageUri!, 
+  //       user.id,
+  //       (progress) => {
+  //         setUploadProgress(progress);
+  //       }
+  //     );
+      
+  //     console.log('✅ Image uploaded to storage:', storageImageUrl);
+
+  //     const workData: UploadWork = createUploadWorkData(
+  //       title,
+  //       description,
+  //       storageImageUrl,
+  //       mediaType
+  //     );
+
+  //     let createdWork: CreativeWork;
+    
+  //     if (isRemix && originalWork) {
+  //       // Create as remix
+  //       const remixData: DerivativeWorkData = {
+  //         ...workData,
+  //         originalWorkId: originalWork.id,
+  //         remixType: 'remix',
+  //         attribution: `Inspired by "${originalWork.title}" by ${originalWork.artist?.displayName}`
+  //       };
+  //       createdWork = await worksService.createRemix(remixData);
+  //     } else {
+  //       // Create as original work
+  //       createdWork = await worksService.createWork(workData);
+      
+  //     console.log('📦 Work data being created:', workData);
+      
+  //     // Use worksService to create the work record
+      
+  //     console.log('🎉 Work created successfully!');
+  //     console.log('🆔 Work ID:', createdWork.id);
+  //     console.log('🖼️ Work assetUrl:', createdWork.assetUrl);
+  
+  //     showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
+      
+  //     // Reset form on success
+  //     setTitle('');
+  //     setDescription('');
+  //     setImageUri(null);
+  //     setMediaType('line_art');
+      
+  //   }
+
+      
+  //   } catch (error: any) {
+  //     console.error('💥 Upload failed:', error);
+  //     const errorMessage = error?.message || 'Please try again.';
+  //     showModal('Upload Failed', `Failed to upload artwork: ${errorMessage}`, 'error');
+  //   } finally {
+  //     setUploading(false);
+  //     setShowProgress(false);
+  //     setUploadProgress(0);
+  //   }
+  // };
+
+  // ==================== RENDER ====================
   return (
     <ScrollView style={styles.container}>
-       {isRemix && originalWork && (
-        <View style={styles.remixHeader}>
-          <Text style={styles.remixTitle}>
-            🎨 Creating a Remix
-          </Text>
-          <Text style={styles.remixSubtitle}>
-            Based on "{originalWork.title}"
-          </Text>
-        </View>
-      )}
-      <Text style={styles.title}>Upload Creative Work</Text>
-      
-      <AlertModal
-        visible={modalVisible}
-        title={modalTitle}
-        message={modalMessage}
-        type={modalType}
-        onClose={hideModal}
-      />
-
-       {/* Progress Bar */}
-       {showProgress && (
-        <View style={styles.progressSection}>
-          <Text style={styles.progressText}>
-            {uploadProgress < 100 ? 'Uploading...' : 'Processing...'}
-          </Text>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill,
-                { width: `${uploadProgress}%` }
-              ]} 
-            />
-          </View>
-          <Text style={styles.progressPercentage}>{uploadProgress}%</Text>
-        </View>
-      )}
-      
-      {/* Media Type Selection */}
-      <View style={styles.section}>
-  <Text style={styles.sectionTitle}>Media Type</Text>
-  <Text style={styles.sectionDescription}>
-    What kind of creative work is this?
-  </Text>
-  
-  <ScrollView 
-    horizontal 
-    showsHorizontalScrollIndicator={false}
-    style={styles.mediaTypeScroll}
-    contentContainerStyle={styles.mediaTypeScrollContent}
-  >
-    {UPLOADABLE_MEDIA_TYPES.map((config: UploadableMediaTypeConfig) => (
-      <TouchableOpacity
-        key={config.value}
-        style={[
-          styles.mediaTypeOption,
-          mediaType === config.value && styles.mediaTypeOptionSelected
-        ]}
-        onPress={() => setMediaType(config.value)}
-      >
-        <Text style={[
-          styles.mediaTypeOptionEmoji,
-          mediaType === config.value && styles.mediaTypeOptionEmojiSelected
-        ]}>
-          {config.emoji}
-        </Text>
-        <Text style={[
-          styles.mediaTypeOptionLabel,
-          mediaType === config.value && styles.mediaTypeOptionLabelSelected
-        ]}>
-          {config.label}
-        </Text>
-        <Text style={styles.mediaTypeOptionDescription}>
-          {config.description}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </ScrollView>
-  
-  {/* Show selected option details */}
-  <View style={styles.selectedTypeInfo}>
-    <Text style={styles.selectedTypeTitle}>
-      {mediaUtils.getMediaTypeLabel(mediaType)}
-    </Text>
-    <Text style={styles.selectedTypeDescription}>
-      {mediaUtils.getMediaTypeDescription(mediaType)}
-    </Text>
-  </View>
-</View>
-
-      {/* Image Upload */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Work Image</Text>
-        <Text style={styles.sectionDescription}>
-          Select a high-quality image of your artwork
-        </Text>
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-  {imageUri ? (
-    <View style={styles.imagePreviewContainer}>
-      <Image 
-        source={{ uri: imageUri }} 
-        style={styles.imagePreview}
-        resizeMode="cover"
-      />
-      <View style={styles.imageOverlay}>
-        <Text style={styles.imagePickerText}>✓ Image Selected</Text>
-        <Text style={styles.imagePickerSubtext}>Tap to change</Text>
-      </View>
-    </View>
-  ) : (
-    <View style={styles.imageNotSelected}>
-      <Text style={styles.imagePickerText}>📷 Tap to Select Image</Text>
-      <Text style={styles.imagePickerSubtext}>PNG, JPG, or WebP</Text>
-    </View>
-  )}
-</TouchableOpacity>
-      </View>
-
-      {/* Work Details */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Work Details</Text>
+      <View style={styles.form}>
+        {/* Title */}
+        <Text style={styles.label}>Title *</Text>
         <TextInput
           style={styles.input}
-          placeholder="Give your artwork a title..."
           value={title}
           onChangeText={setTitle}
+          placeholder="Give your artwork a title"
           maxLength={100}
         />
+        
+        {/* Description */}
+        <Text style={styles.label}>Description</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
-          placeholder="Describe your artwork (optional)..."
           value={description}
           onChangeText={setDescription}
+          placeholder="Tell us about your artwork..."
           multiline
-          numberOfLines={3}
+          numberOfLines={4}
           maxLength={500}
         />
-      </View>
-
-      {/* Upload Button */}
-      <TouchableOpacity 
-        style={[
-          styles.uploadButton,
-          (!title.trim() || !imageUri || uploading) && styles.uploadButtonDisabled
-        ]}
-        onPress={handleUpload}
-        disabled={!title.trim() || !imageUri || uploading}
-      >
-        {uploading ? (
-          <View style={styles.uploadingContainer}>
-            <ActivityIndicator color="white" size="small" />
-            <Text style={styles.uploadButtonText}>Uploading...</Text>
+        
+        {/* Image Upload */}
+        <Text style={styles.label}>Image *</Text>
+        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.placeholderText}>Tap to select image</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        
+        {/* Media Type Selector */}
+        <Text style={styles.label}>Media Type</Text>
+        <View style={styles.mediaTypeContainer}>
+          {mediaUtils.getUploadableMediaTypes().map(type => {
+            const config = mediaUtils.getMediaTypeConfig(type);
+            return (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.mediaTypeButton,
+                  selectedMediaType === type && styles.mediaTypeButtonSelected
+                ]}
+                onPress={() => setSelectedMediaType(type)}
+              >
+                <Text style={[
+                  styles.mediaTypeText,
+                  selectedMediaType === type && styles.mediaTypeTextSelected
+                ]}>
+                  {config.emoji} {config.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        
+        {/* Tags */}
+        <Text style={styles.label}>Tags</Text>
+        <View style={styles.tagInputContainer}>
+          <TextInput
+            style={[styles.input, styles.tagInput]}
+            value={tagInput}
+            onChangeText={setTagInput}
+            placeholder="Add a tag and press Enter"
+            onSubmitEditing={addTag}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.addTagButton} onPress={addTag}>
+            <Text style={styles.addTagButtonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Tags Display */}
+        {tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {tags.map(tag => (
+              <TouchableOpacity
+                key={tag}
+                style={styles.tag}
+                onPress={() => removeTag(tag)}
+              >
+                <Text style={styles.tagText}>{tag} ×</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        ) : (
-          <Text style={styles.uploadButtonText}>
-            🚀 Upload {mediaType === 'line_art' ? 'Line Art' : 
-                   mediaType === 'colored_art' ? 'Colored Art' : 'Digital Art'}
-          </Text>
         )}
-      </TouchableOpacity>
-
-      {/* Upload Tips */}
-      <View style={styles.tipsSection}>
-        <Text style={styles.tipsTitle}>💡 Upload Tips</Text>
-        <Text style={styles.tip}>• Testing phase, use smaller artworks for now!</Text>
-        <Text style={styles.tip}>• No AI artwork here! </Text>
-        <Text style={styles.tip}>• Add descriptive titles to help others find your work</Text>
+        
+        {/* Upload Button */}
+        <TouchableOpacity
+          style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
+          onPress={handleUpload}
+          disabled={uploading}
+        >
+          {uploading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.uploadButtonText}>
+              {isRemix ? 'Create Remix' : 'Upload Artwork'}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
+      
+      {/* ==================== MODALS ==================== */}
+      
+      {/* Success Modal */}
+      <AlertModal
+        visible={showSuccessModal}
+        title="Success! 🎉"
+        message={modalMessage}
+        type="success"
+        onClose={handleSuccessModalClose}
+      />
+      
+      {/* Error Modal */}
+      <AlertModal
+        visible={showErrorModal}
+        title="Oops! 😅"
+        message={modalMessage}
+        type="error"
+        onClose={handleErrorModalClose}
+      />
     </ScrollView>
   );
 };
 
+// ==================== STYLES ====================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
     backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    textAlign: 'center',
-    color: '#333',
+  form: {
+    padding: 20,
   },
-  section: {
-    marginBottom: 24,
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: '#333',
-  },
-  sectionDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-  },
-  mediaTypeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  mediaTypeButton: {
-    flex: 1,
-    minWidth: 100,
-    padding: 12,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  mediaTypeButtonSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#e7f3ff',
-  },
-  mediaTypeText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  mediaTypeTextSelected: {
-    color: '#007AFF',
-  },
-  mediaTypeDescription: {
-    fontSize: 11,
-    color: '#666',
-    textAlign: 'center',
-  },
-  imagePicker: {
-    backgroundColor: 'white',
-    padding: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderStyle: 'dashed',
-  },
-  imageSelected: {
-    alignItems: 'center',
-  },
-  imageNotSelected: {
-    alignItems: 'center',
-  },
-  imagePickerText: {
+  label: {
     fontSize: 16,
-    color: '#666',
-    fontWeight: '500',
-  },
-  imagePickerSubtext: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 4,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 16,
   },
   input: {
     backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
-    marginBottom: 12,
+    borderRadius: 8,
+    padding: 12,
     fontSize: 16,
   },
   textArea: {
-    height: 80,
+    minHeight: 100,
     textAlignVertical: 'top',
+  },
+  imagePicker: {
+    height: 200,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  mediaTypeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  mediaTypeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  mediaTypeButtonSelected: {
+    backgroundColor: '#007AFF',
+  },
+  mediaTypeText: {
+    fontSize: 14,
+  },
+  mediaTypeTextSelected: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  tagInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  tagInput: {
+    flex: 1,
+  },
+  addTagButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  addTagButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tag: {
+    backgroundColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  tagText: {
+    fontSize: 14,
   },
   uploadButton: {
     backgroundColor: '#007AFF',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
+    marginTop: 32,
+    marginBottom: 50,
   },
   uploadButtonDisabled: {
     backgroundColor: '#ccc',
   },
-  uploadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   uploadButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  tipsSection: {
-    backgroundColor: '#e7f3ff',
-    padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  tipsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#007AFF',
-  },
-  tip: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  imagePreviewContainer: {
-    width: '100%',
-    height: 200,
-    position: 'relative',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 8,
-    alignItems: 'center',
-  },
-  progressSection: {
-    marginBottom: 16,
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  progressText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#007AFF',
-    borderRadius: 4,
-  },
-  progressPercentage: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  remixHeader: {
-    backgroundColor: '#f5f3ff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#7C3AED',
-  },
-  remixTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#7C3AED',
-    marginBottom: 4,
-  },
-  remixSubtitle: {
-    fontSize: 14,
-    color: '#6d28d9',
-  },
-  mediaTypeScroll: {
-    marginHorizontal: -16, // Bleed to edges
-  },
-  mediaTypeScrollContent: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  mediaTypeOption: {
-    width: 140,
-    padding: 16,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-  },
-  mediaTypeOptionSelected: {
-    borderColor: '#7C3AED',
-    backgroundColor: '#f5f3ff',
-  },
-  mediaTypeOptionEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  mediaTypeOptionEmojiSelected: {
-    // Emoji stays the same when selected
-  },
-  mediaTypeOptionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  mediaTypeOptionLabelSelected: {
-    color: '#7C3AED',
-  },
-  mediaTypeOptionDescription: {
-    fontSize: 11,
-    color: '#94a3b8',
-    textAlign: 'center',
-    lineHeight: 14,
-  },
-  selectedTypeInfo: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#7C3AED',
-  },
-  selectedTypeTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  selectedTypeDescription: {
-    fontSize: 13,
-    color: '#64748b',
-    lineHeight: 18,
   },
 });
 

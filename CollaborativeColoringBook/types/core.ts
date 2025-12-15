@@ -44,7 +44,7 @@ export interface LineArtConfig {
 }
 
 export interface ColoredArtConfig {
-  isColorable: true;
+  isColorable: false;
   originalLineArtId?: string;
   complexity: 'simple' | 'medium' | 'complex';
   technique: 'flat' | 'gradient' | 'textured';
@@ -91,7 +91,7 @@ export type CreativeWork = {
   artistId: string;
   mediaType: MediaType;
   assetUrl: string;
-  mediaConfig: MediaConfig;
+  mediaConfig: BasicMediaConfig;
   originalWorkId?: string;
   derivationChain: string[];
   metadata: Record<string, any>;
@@ -113,8 +113,8 @@ export type UploadWork = {
   tags: string[];
   visibility: 'public' | 'private' | 'unlisted';
   mediaType: 'line_art' | 'colored_art' | 'digital_art';
-  mediaConfig: LineArtConfig | ColoredArtConfig | DigitalArtConfig;
-}
+  mediaConfig: BasicMediaConfig;
+};
 
 export const validateUploadWork = (work: UploadWork): { isValid: boolean; error?: string } => {
   // Runtime validation instead of compile-time
@@ -190,11 +190,11 @@ export const isLineArtConfig = (config: MediaConfig): config is LineArtConfig =>
   };
   
   export const isColorableWork = (work: CreativeWork): boolean => {
-    return work.mediaType === 'line_art' || work.mediaType === 'colored_art';
+    return work.mediaType === 'line_art';
   };
   
   export const getColorableConfig = (work: CreativeWork): LineArtConfig | ColoredArtConfig | null => {
-    if (work.mediaType === 'line_art' || work.mediaType === 'colored_art') {
+    if (work.mediaType === 'line_art') {
       return work.mediaConfig as LineArtConfig | ColoredArtConfig;
     }
     return null;
@@ -212,4 +212,13 @@ export interface DerivativeWorkData extends UploadWork {
 export const extractUploadWork = (data: DerivativeWorkData): UploadWork => {
   const { remixType, attribution, ...uploadWork } = data;
   return uploadWork;
+};
+
+export type SimpleMediaConfig = Record<string, any>;
+
+export interface BasicMediaConfig {
+  // Optional basic fields
+  notes?: string;
+  // Allow any extra data
+  [key: string]: any;
 };

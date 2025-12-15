@@ -1,3 +1,4 @@
+// services/worksService.ts
 import { supabase } from '../lib/supabase';
 import { 
   CreativeWork, 
@@ -6,89 +7,284 @@ import {
   User, 
   UploadWork, 
   DerivativeWorkData, 
-  CollaborationType,
-  validateUploadWork } from '../types/core';
-import { storageService } from '../services/storageService'
-import { transformDatabaseUser, createFallbackUser } from '../utils/userTransformers';
+  CollaborationType
+} from '../types/core';
+import { storageService } from './storageService';
+import { transformDatabaseUser } from '../utils/userTransformers';
 
-export const worksService = {
+// ==================== TYPES ====================
+type ServiceResult<T> = {
+  data: T | null;
+  error: string | null;
+  success: boolean;
+};
 
-  // === CORE WORK METHODS ===
-
-  // Main method: Work with artist (what you'll use 90% of the time)
-  async getWork(workId: string): Promise<CreativeWork> {
-    console.log('🔍 Getting work with artist:', workId);
+// ==================== SAFE WRAPPER ====================
+async function safeQuery<T>(
+  operation: () => Promise<T>,
+  operationName: string
+): Promise<ServiceResult<T>> {
+  try {
+    const data = await operation();
+    return { data, error: null, success: true };
+  } catch (err: any) {
+    console.error(`❌ [Works:${operationName}] failed:`, err.message || err);
     
-    const { data, error } = await supabase
-      .from('works')
-      .select(`
-        *,
-        artist:users(
-          id,
-          username,
-          display_name,
-          avatar_url,
-          bio,
-          roles,
-          created_at
-        )
-      `)
-      .eq('id', workId)
-      .single();
-    
-    if (error) {
-      console.error('❌ Error getting work with artist:', error);
-      throw error;
+    let errorMessage = 'Action failed. Please try again.';
+    if (err.message?.includes('Network')) {
+      errorMessage = 'No internet connection';
+    } else if (err.message?.includes('not found')) {
+      errorMessage = 'Artwork not found';
+    } else if (err.message?.includes('auth')) {
+      errorMessage = 'Please log in to continue';
     }
     
-    console.log('✅ Raw work with artist data:', {
-      workId: data.id,
-      hasArtist: !!data.artist,
-      artistName: data.artist?.display_name
-    });
-    
-    return {
-      ...this.transformDatabaseWork(data),
-      artist: transformDatabaseUser(data.artist)
+    return { 
+      data: null, 
+      error: errorMessage, 
+      success: false 
     };
-  },
+  }
+}
 
-  // All works for gallery (with artists and social data)
+// ==================== FALLBACKS ====================
+function createFallbackWork(workId: string): CreativeWork {
+  return {
+    id: workId,
+    title: 'Untitled Artwork',
+    description: 'Artwork unavailable',
+    artistId: 'unknown',
+    mediaType: 'line_art',
+    assetUrl: '', // Consider a placeholder image
+    mediaConfig: { isColorable: false, complexity: 'medium' },
+    originalWorkId: undefined,
+    derivationChain: [],
+    metadata: {},
+    tags: [],
+    visibility: 'public',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    artist: createFallbackUser('unknown')
+  };
+}
+
+function createFallbackUser(userId: string): User {
+  return {
+    id: userId,
+    username: 'unknown',
+    displayName: 'Unknown Artist',
+    avatarUrl: undefined,
+    bio: '',
+    roles: ['supporter'],
+    joinedDate: new Date(),
+  };
+}
+
+// ==================== MAIN SERVICE ====================
+export const worksService = {
+  
+  // ✅ Get work with artist (with fallback)
+  async getWork(workId: string): Promise<CreativeWork> {
+    const result = await safeQuery(async () => {
+      const { data, error } = await supabase
+        .from('works')
+        .select(`
+          *,
+          artist:users(
+            id,
+            username,
+            display_name,
+            avatar_url,
+            bio,
+            roles,
+            created_at
+          )
+        `)
+        .eq('id', workId)
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        ...this.transformDatabaseWork(data),
+        artist: transformDatabaseUser(data.artist)
+      };
+    }, 'getWork');
+    
+    return result.data || createFallbackWork(workId);
+  },
+  
+  // ✅ Get all works (empty array fallback)
   async getAllWorks(): Promise<CreativeWork[]> {
-    console.log('🔍 Getting all works with artists');
-    return this.getWorksWithSocialData();
+    const result = await safeQuery(async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData.user?.id;
+      
+      const { data, error } = await supabase
+        .from('works')
+        .select(`
+          *,
+          artist:users(
+            id,
+            username,
+            display_name,
+            avatar_url,
+            bio,
+            roles,
+            created_at
+          ),
+          likes:likes(
+            id,
+            user_id,
+            created_at,
+            user:users(id, username, display_name)
+          ),
+          comments:comments(
+            id,
+            user_id,
+            text,
+            created_at,
+            user:users(id, username, display_name)
+          )
+        `)
+        .eq('visibility', 'public')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Deduplicate
+      const uniqueWorksMap = new Map();
+      data?.forEach(dbWork => {
+        if (!uniqueWorksMap.has(dbWork.id)) {
+          uniqueWorksMap.set(dbWork.id, dbWork);
+        }
+      });
+      
+      const uniqueData = Array.from(uniqueWorksMap.values());
+      
+      return uniqueData.map(dbWork => 
+        this.transformDatabaseWorkWithSocial(dbWork, currentUserId)
+      );
+    }, 'getAllWorks');
+    
+    return result.data || [];
   },
   
-  // Basic work without joins (for performance when you don't need artist)
-  async getWorkBasic(workId: string): Promise<CreativeWork> {
-    const { data, error } = await supabase
-      .from('works')
-      .select('*')
-      .eq('id', workId)
-      .single();
-    
-    if (error) throw error;
-    return this.transformDatabaseWork(data);
+  // ✅ Create work with validation
+  async createWork(workData: UploadWork): Promise<ServiceResult<CreativeWork>> {
+    return safeQuery(async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Validation
+      if (!workData.title?.trim()) {
+        throw new Error('Title is required');
+      }
+      if (!workData.assetUrl) {
+        throw new Error('Image is required');
+      }
+      
+      // Build derivation chain
+      let derivationChain: string[] = [];
+      if (workData.originalWorkId) {
+        const original = await this.getWorkBasic(workData.originalWorkId);
+        derivationChain = [...original.derivationChain, workData.originalWorkId];
+      }
+      
+      const work = {
+        title: workData.title.trim(),
+        description: workData.description?.trim(),
+        media_type: workData.mediaType,
+        asset_url: workData.assetUrl,
+        media_config: workData.mediaConfig,
+        original_work_id: workData.originalWorkId,
+        artist_id: userData.user.id,
+        derivation_chain: derivationChain,
+        tags: workData.tags || [],
+        visibility: workData.visibility || 'public',
+        metadata: {}
+      };
+      
+      const { data, error } = await supabase
+        .from('works')
+        .insert(work)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Return the full work
+      return this.getWork(data.id);
+    }, 'createWork');
   },
   
-  // Work with full context (for detail pages)
-  async getWorkWithContext(workId: string): Promise<WorkWithContext> {
-    console.log('🔍 Getting work with full context:', workId);
-    
-    // Get work with artist first
-    const work = await this.getWork(workId);
-    
-    // Get additional context in parallel
-    const [collaborations, remixes, originalWork] = await Promise.all([
-      this.getWorkCollaborations(workId),
-      this.getWorkRemixes(workId),
-      work.originalWorkId ? this.getWork(work.originalWorkId).catch(() => undefined) : Promise.resolve(undefined)
-    ]);
-
-    // Get siblings (other works from same original)
-    let siblings: CreativeWork[] = [];
-    if (work.originalWorkId) {
+  // ✅ Delete work with cleanup
+  async deleteWork(workId: string): Promise<ServiceResult<void>> {
+    return safeQuery(async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
+      // Get work first
+      const work = await this.getWorkBasic(workId);
+      if (work.artistId !== user.id) {
+        throw new Error('You can only delete your own artworks');
+      }
+      
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('works')
+        .delete()
+        .eq('id', workId)
+        .eq('artist_id', user.id);
+      
+      if (dbError) throw dbError;
+      
+      // Try to delete storage (optional)
       try {
+        if (work.assetUrl) {
+          await storageService.deleteArtworkImage(work.assetUrl);
+        }
+      } catch (storageError) {
+        console.warn('⚠️ Could not delete image from storage:', storageError);
+        // Continue anyway
+      }
+    }, 'deleteWork');
+  },
+  
+  // ✅ Internal: Get basic work (no joins)
+  async getWorkBasic(workId: string): Promise<CreativeWork> {
+    const result = await safeQuery(async () => {
+      const { data, error } = await supabase
+        .from('works')
+        .select('*')
+        .eq('id', workId)
+        .single();
+      
+      if (error) throw error;
+      return this.transformDatabaseWork(data);
+    }, 'getWorkBasic');
+    
+    return result.data || createFallbackWork(workId);
+  },
+  
+  // ✅ Get work with full context
+  async getWorkWithContext(workId: string): Promise<WorkWithContext> {
+    const result = await safeQuery(async () => {
+      // Get work with artist
+      const work = await this.getWork(workId);
+      
+      // Get additional context in parallel
+      const [collaborations, remixes, originalWork] = await Promise.all([
+        this.getWorkCollaborations(workId),
+        this.getWorkRemixes(workId),
+        work.originalWorkId ? this.getWork(work.originalWorkId) : Promise.resolve(undefined)
+      ]);
+      
+      // Get siblings
+      let siblings: CreativeWork[] = [];
+      if (work.originalWorkId) {
         const { data } = await supabase
           .from('works')
           .select('*')
@@ -96,52 +292,78 @@ export const worksService = {
           .neq('id', workId);
         
         siblings = data?.map(this.transformDatabaseWork) || [];
-      } catch (error) {
-        console.warn('Could not load siblings:', error);
       }
-    }
-
-    return {
-      work, // Already includes artist
-      originalWork,
-      collaborations: [...collaborations.asOriginal, ...collaborations.asDerivative],
-      artist: work.artist, // Same reference as work.artist
-      remixes,
-      siblings
-    };
-  },
-  
-  // Colorable works only
-  async getColorableWorks(): Promise<CreativeWork[]> {
-    const { data, error } = await supabase
-      .from('works')
-      .select(`
-        *,
-        artist:users(
-          id,
-          username,
-          display_name,
-          avatar_url,
-          bio,
-          roles,
-          created_at
-        )
-      `)
-      .or('media_type.eq.line_art,media_type.eq.colored_art')
-      .eq('visibility', 'public');
+      
+      return {
+        work,
+        originalWork,
+        collaborations: [...collaborations.asOriginal, ...collaborations.asDerivative],
+        artist: work.artist,
+        remixes,
+        siblings
+      };
+    }, 'getWorkWithContext');
     
-    if (error) throw error;
-    return data.map(dbWork => ({
-      ...this.transformDatabaseWork(dbWork),
-      artist: transformDatabaseUser(dbWork.artist)
-    }));
+    // If failed, create minimal context
+    if (!result.data) {
+      const fallbackWork = createFallbackWork(workId);
+      return {
+        work: fallbackWork,
+        originalWork: undefined,
+        collaborations: [],
+        artist: fallbackWork.artist,
+        remixes: [],
+        siblings: []
+      };
+    }
+    
+    return result.data;
   },
-
-  // === TRANSFORMERS ===
   
+  // ✅ Create remix
+  async createRemix(remixData: DerivativeWorkData): Promise<ServiceResult<CreativeWork>> {
+    return safeQuery(async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error('Not authenticated');
+      
+      // Create the work
+      const uploadWork: UploadWork = {
+        title: remixData.title,
+        description: remixData.description,
+        assetUrl: remixData.assetUrl,
+        originalWorkId: remixData.originalWorkId,
+        tags: remixData.tags,
+        visibility: remixData.visibility,
+        mediaType: remixData.mediaType,
+        mediaConfig: remixData.mediaConfig
+      };
+      
+      const workResult = await this.createWork(uploadWork);
+      if (!workResult.data) {
+        throw new Error('Failed to create work: ' + workResult.error);
+      }
+      
+      // Try to create collaboration record
+      try {
+        await supabase
+          .from('collaborations')
+          .insert({
+            original_work_id: remixData.originalWorkId,
+            derived_work_id: workResult.data.id,
+            collaboration_type: remixData.remixType || 'remix',
+            description: remixData.attribution || `Remix of work`
+          });
+      } catch (collabError) {
+        console.warn('⚠️ Collaboration record failed:', collabError);
+        // Continue - the main work was created
+      }
+      
+      return workResult.data;
+    }, 'createRemix');
+  },
+  
+  // ===== YOUR EXISTING TRANSFORMERS (keep these) =====
   transformDatabaseWork(dbWork: any): CreativeWork {
-    console.log('🔄 Transforming db work:', dbWork);
-  console.log('🆔 DB work ID:', dbWork.id);
     return {
       id: dbWork.id,
       title: dbWork.title,
@@ -149,7 +371,7 @@ export const worksService = {
       artistId: dbWork.artist_id,
       mediaType: dbWork.media_type,
       assetUrl: dbWork.asset_url,
-      mediaConfig: dbWork.media_config,
+      mediaConfig: dbWork.media_config || {} ,
       originalWorkId: dbWork.original_work_id,
       derivationChain: dbWork.derivation_chain || [],
       metadata: dbWork.metadata || {},
@@ -159,71 +381,7 @@ export const worksService = {
       updatedAt: new Date(dbWork.updated_at)
     };
   },
-
-  // === SOCIAL DATA METHODS ===
-
-  async getWorksWithSocialData(): Promise<CreativeWork[]> {
-    const { data: userData } = await supabase.auth.getUser();
-    const currentUserId = userData.user?.id;
-    
-    const { data, error } = await supabase
-      .from('works')
-      .select(`
-        *,
-        artist:users(
-          id,
-          username,
-          display_name,
-          avatar_url,
-          bio,
-          roles,
-          created_at
-        ),
-        likes:likes(
-          id,
-          user_id,
-          created_at,
-          user:users(id, username, display_name)
-        ),
-        comments:comments(
-          id,
-          user_id,
-          text,
-          created_at,
-          user:users(id, username, display_name)
-        )
-      `)
-      .eq('visibility', 'public')
-      .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ Error getting works with social data:', error);
-        throw error;
-      }
-
-      // Debug: Check first work
-    if (data.length > 0) {
-      console.log('📊 First work artist data:', data[0]?.artist);
-    }
-
-    // Deduplicate
-    const uniqueWorksMap = new Map();
-    data.forEach(dbWork => {
-      if (!uniqueWorksMap.has(dbWork.id)) {
-        uniqueWorksMap.set(dbWork.id, dbWork);
-      }
-    });
-    
-    // Convert map back to array
-    const uniqueData = Array.from(uniqueWorksMap.values());
-    
-    console.log(`📊 Deduplicated: ${data.length} → ${uniqueData.length} works`);
-    
-    return uniqueData.map(dbWork => 
-      this.transformDatabaseWorkWithSocial(dbWork, currentUserId)
-    );
-  },
-
+  
   transformDatabaseWorkWithSocial(dbWork: any, currentUserId?: string): CreativeWork {
     const baseWork = {
       ...this.transformDatabaseWork(dbWork),
@@ -250,216 +408,56 @@ export const worksService = {
       userHasLiked: dbWork.likes?.some((like: any) => like.user_id === currentUserId) || false
     };
   },
-
-  // === CREATE/UPDATE METHODS ===
-
-  async createWork(workData: UploadWork): Promise<CreativeWork> {
-
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) throw new Error('Not authenticated');
-
-    // Optional: Add runtime validation
-    const validation = validateUploadWork(workData);
-    if (!validation.isValid) {
-    throw new Error(`Invalid work data: ${validation.error}`);
-    }
-
-    let derivationChain: string[] = [];
-    const metadata = {};
-    
-    // Build derivation chain if this is a derivative work
-    if (workData.originalWorkId) {
-      const originalWork = await this.getWorkBasic(workData.originalWorkId);
-      derivationChain = [...originalWork.derivationChain, workData.originalWorkId];
-    }
-    
-    const work = {
-      title: workData.title,
-      description: workData.description,
-      media_type: workData.mediaType,        
-      asset_url: workData.assetUrl,          
-      media_config: workData.mediaConfig,    
-      original_work_id: workData.originalWorkId, 
-      artist_id: userData.user.id,           
-      derivation_chain: derivationChain,
-      tags: workData.tags || [],
-      visibility: workData.visibility || 'public',
-      metadata: metadata
-    };
-    
-    const { data, error } = await supabase
-      .from('works')
-      .insert(work)
-      .select()
-      .single();
-    
-    if (error) throw error;
-  // Return the created work with artist data
-  return this.getWork(data.id);
-    
-  },
-
-  async deleteWork(workId: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    // First, get the work to verify ownership and get the asset URL
-    const work = await this.getWorkBasic(workId);
-    
-    // Check if the current user is the artist
-    if (work.artistId !== user.id) {
-      throw new Error('You can only delete your own artworks');
-    }
-
-    // Delete the work from database
-    const { error: workError } = await supabase
-      .from('works')
-      .delete()
-      .eq('id', workId)
-      .eq('artist_id', user.id); // Double-check ownership
-
-    if (workError) throw workError;
-
-    // Delete the associated image from storage
-    try {
-      await storageService.deleteArtworkImage(work.assetUrl);
-    } catch (storageError) {
-      console.warn('⚠️ Could not delete image from storage:', storageError);
-      // Continue even if storage deletion fails
-    }
-
-    console.log('✅ Work deleted successfully:', workId);
-  },
-
-  async createRemix(remixData: DerivativeWorkData): Promise<CreativeWork> {
-    const { data: userData } = await supabase.auth.getUser();
   
-    if (!userData.user) throw new Error('Not authenticated');
-
-    // Get the original work
-    const originalWork = await this.getWork(remixData.originalWorkId);
-
-    // Create the remix work - NO VALIDATION!
-    const uploadWork: UploadWork = {
-      title: remixData.title,
-      description: remixData.description,
-      assetUrl: remixData.assetUrl,
-      originalWorkId: remixData.originalWorkId,
-      tags: remixData.tags,
-      visibility: remixData.visibility,
-      mediaType: remixData.mediaType,
-      mediaConfig: remixData.mediaConfig
-    };
-
-    const work = await this.createWork(uploadWork);
-
-  // Create collaboration record
-  await this.createCollaborationRecord({
-    originalWorkId: remixData.originalWorkId,
-    derivedWorkId: work.id,
-    collaborationType: remixData.remixType || 'remix',
-    description: remixData.attribution || `Remix of "${originalWork.title}"`
-  });
-
-  console.log('✅ Remix created successfully:', {
-    original: originalWork.title,
-    remix: work.title,
-    type: remixData.remixType
-  });
-
-  return work;
-},
-
-// === COLLABORATION METHODS ===
-
-  async createCollaborationRecord(collabData: {
-    originalWorkId: string;
-    derivedWorkId: string;
-    collaborationType: CollaborationType;
-    description?: string;
-  }): Promise<void> {
-    const { error } = await supabase
-      .from('collaborations')
-      .insert({
-        original_work_id: collabData.originalWorkId,
-        derived_work_id: collabData.derivedWorkId,
-        collaboration_type: collabData.collaborationType,
-        description: collabData.description,
-        created_at: new Date().toISOString()
-      });
-
-    if (error) {
-      console.error('❌ Failed to create collaboration:', error);
-      throw error;
-    }
-  },
-
+  // ===== EXISTING HELPER METHODS =====
   async getWorkRemixes(workId: string): Promise<CreativeWork[]> {
-    const { data, error } = await supabase
-      .from('works')
-      .select('*')
-      .eq('original_work_id', workId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data.map(this.transformDatabaseWork);
-  },
-
-  async getWorkCollaborations(workId: string): Promise<{
-    asOriginal: Collaboration[];  // Works where this is the original
-    asDerivative: Collaboration[]; // Works where this is the remix
-  }> {
-    const [asOriginal, asDerivative] = await Promise.all([
-      supabase
-        .from('collaborations')
+    const result = await safeQuery(async () => {
+      const { data, error } = await supabase
+        .from('works')
         .select('*')
-        .eq('original_work_id', workId),
-      supabase
-        .from('collaborations')
-        .select('*')
-        .eq('derived_work_id', workId)
-    ]);
-
-    const transformCollab = (collab: any): Collaboration => ({
-      id: collab.id,
-      originalWorkId: collab.original_work_id,
-      derivedWorkId: collab.derived_work_id,
-      collaborationType: collab.collaboration_type,
-      context: collab.context || {},
-      description: collab.description,
-      attribution: collab.attribution || 'Inspired by',
-      createdAt: new Date(collab.created_at)
-    });
-
-    return {
-      asOriginal: asOriginal.data?.map(transformCollab) || [],
-      asDerivative: asDerivative.data?.map(transformCollab) || []
-    };
-  },
-
-  // Helper to get artist (rarely needed since works include artist)
-
-  async getWorkArtist(artistId: string): Promise<User>  {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', artistId)
-      .single();
-
-      if (error) {
-        console.error('❌ Error fetching artist:', error);
-        // Return a default user instead of throwing
-        return {
-          id: artistId,
-          username: 'Unknown Artist',
-          displayName: 'Unknown Artist',
-          avatarUrl: undefined,
-          bio: '',
-          roles: ['supporter'],
-          joinedDate: new Date(),
-        };
-      }
+        .eq('original_work_id', workId)
+        .order('created_at', { ascending: false });
       
-      return transformDatabaseUser(data);
-    },
+      if (error) throw error;
+      return data.map(this.transformDatabaseWork);
+    }, 'getWorkRemixes');
+    
+    return result.data || [];
+  },
+  
+  async getWorkCollaborations(workId: string): Promise<{
+    asOriginal: Collaboration[];
+    asDerivative: Collaboration[];
+  }> {
+    const result = await safeQuery(async () => {
+      const [asOriginal, asDerivative] = await Promise.all([
+        supabase
+          .from('collaborations')
+          .select('*')
+          .eq('original_work_id', workId),
+        supabase
+          .from('collaborations')
+          .select('*')
+          .eq('derived_work_id', workId)
+      ]);
+      
+      const transformCollab = (collab: any): Collaboration => ({
+        id: collab.id,
+        originalWorkId: collab.original_work_id,
+        derivedWorkId: collab.derived_work_id,
+        collaborationType: collab.collaboration_type,
+        context: collab.context || {},
+        description: collab.description,
+        attribution: collab.attribution || 'Inspired by',
+        createdAt: new Date(collab.created_at)
+      });
+      
+      return {
+        asOriginal: asOriginal.data?.map(transformCollab) || [],
+        asDerivative: asDerivative.data?.map(transformCollab) || []
+      };
+    }, 'getWorkCollaborations');
+    
+    return result.data || { asOriginal: [], asDerivative: [] };
+  }
 };

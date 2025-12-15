@@ -1,288 +1,307 @@
 // services/socialService.ts
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
 
+// ==================== TYPES ====================
+export type SocialResult<T> = {
+  data: T | null;
+  error: string | null;
+  success: boolean;
+};
+
+// ==================== SAFE QUERY WRAPPER ====================
+async function safeSocialQuery<T>(
+  operation: () => Promise<T>,
+  operationName: string
+): Promise<SocialResult<T>> {
+  try {
+    const data = await operation();
+    return { data, error: null, success: true };
+  } catch (err: any) {
+    console.error(`❌ [Social:${operationName}] failed:`, err.message || err);
+    
+    // User-friendly error messages
+    let errorMessage = 'Action failed. Please try again.';
+    if (err.message?.includes('Network') || err.message?.includes('internet')) {
+      errorMessage = 'No internet connection';
+    } else if (err.message?.includes('auth') || err.message?.includes('login')) {
+      errorMessage = 'Please log in to continue';
+    }
+    
+    return { 
+      data: null, 
+      error: errorMessage, 
+      success: false 
+    };
+  }
+}
+
+// ==================== MAIN SERVICE ====================
 export const socialService = {
-
-  // Likes - USE AUTHENTICATED USER
+  
+  // ✅ LIKES ===========================================
+  
   async toggleLike(workId: string, userId: string): Promise<boolean> {
-    try {
-      console.log('❤️ Toggling like for work:', workId, 'by user:', userId);
-      
+    const result = await safeSocialQuery(async () => {
       // Check if already liked
-      const { data: existingLikes, error: checkError } = await supabase
+      const { data: existing } = await supabase
         .from('likes')
         .select('id')
         .eq('work_id', workId)
-        .eq('user_id', userId);
-
-      if (checkError) throw checkError;
-
-      if (existingLikes && existingLikes.length > 0) {
+        .eq('user_id', userId)
+        .maybeSingle(); // Use maybeSingle instead of single
+      
+      if (existing) {
         // Unlike
         const { error } = await supabase
           .from('likes')
           .delete()
-          .eq('work_id', workId)
-          .eq('user_id', userId);
+          .eq('id', existing.id);
         
         if (error) throw error;
-        return false;
+        return false; // Now unliked
       } else {
         // Like
         const { error } = await supabase
           .from('likes')
-          .insert({ 
-            work_id: workId, 
+          .insert({
+            work_id: workId,
             user_id: userId
           });
         
         if (error) throw error;
-        return true;
+        return true; // Now liked
       }
-    } catch (error) {
-      console.error('Error toggling like:', error);
-      throw error;
-    }
-  },
-
-  async getLikeCount(workId: string): Promise<number> {
-    const { count, error } = await supabase
-      .from('likes')
-      .select('*', { count: 'exact', head: true })
-      .eq('work_id', workId);
-
-    if (error) throw error;
-    return count || 0;
-  },
-
-  async isLiked(workId: string): Promise<boolean> { // Remove userId parameter
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    const { data, error } = await supabase
-      .from('likes')
-      .select('id')
-      .eq('work_id', workId)
-      .eq('user_id', user.id); // Use authenticated user ID
-
-    if (error) throw error;
-    return (data && data.length > 0) || false;
-  },
-
-
-  // Comments
-  async getComments(workId: string) {
-    const { data, error } = await supabase
-      .from('comments')
-      .select(`
-        *,
-        user:users(id, username, display_name, avatar_url)
-      `)
-      .eq('work_id', workId)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
+    }, 'toggleLike');
     
-    return data?.map(comment => ({
-      id: comment.id,
-      userId: comment.user_id,
-      userName: comment.user?.display_name || comment.user?.username || 'Unknown User',
-      text: comment.text,
-      createdAt: new Date(comment.created_at)
-    })) || [];
+    // Return current state on failure
+    return result.data ?? false;
   },
-
-  async addComment(workId: string, text: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { data, error } = await supabase
-      .from('comments')
-      .insert({
-        work_id: workId,
-        user_id: user.id, // Use authenticated user ID
-        text: text
-      })
-      .select(`
-        *,
-        user:users(id, username, display_name, avatar_url)
-      `)
-      .single();
-
-    if (error) throw error;
-    
-    return {
-      id: data.id,
-      userId: data.user_id,
-      userName: data.user?.display_name || 'Unknown User',
-      text: data.text,
-      createdAt: new Date(data.created_at)
-    };
-  },
-
-  async deleteComment(commentId: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { error } = await supabase
-      .from('comments')
-      .delete()
-      .eq('id', commentId)
-      .eq('user_id', user.id); // Users can only delete their own comments
-
-    if (error) throw error;
-
-    console.log('✅ Comment deleted:', commentId);
-  },
-
-  // Follow/Unfollow methods
-  async followUser(followerId: string, followingId: string): Promise<boolean> {
-    try {
-      console.log('👥 Attempting to follow:', { followerId, followingId });
-      
-      // First, check if already following to avoid duplicate key error
-      const alreadyFollowing = await this.isFollowing(followerId, followingId);
-      if (alreadyFollowing) {
-        console.log('✅ Already following this user, no action needed');
-        return true; // Consider this a "success" since the desired state is already achieved
-      }
   
+  async getLikeCount(workId: string): Promise<number> {
+    const result = await safeSocialQuery(async () => {
+      const { count, error } = await supabase
+        .from('likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('work_id', workId);
+      
+      if (error) throw error;
+      return count ?? 0;
+    }, 'getLikeCount');
+    
+    return result.data ?? 0;
+  },
+  
+  async isLiked(workId: string, userId?: string): Promise<boolean> {
+    if (!userId) return false;
+    
+    const result = await safeSocialQuery(async () => {
       const { data, error } = await supabase
+        .from('likes')
+        .select('id')
+        .eq('work_id', workId)
+        .eq('user_id', userId)
+        .maybeSingle(); // Safer than single
+      
+      if (error) throw error;
+      return !!data; // true if found
+    }, 'isLiked');
+    
+    return result.data ?? false;
+  },
+  
+  // ✅ COMMENTS ========================================
+  
+  async getComments(workId: string): Promise<any[]> {
+    const result = await safeSocialQuery(async () => {
+      const { data, error } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          user:users(id, username, display_name, avatar_url)
+        `)
+        .eq('work_id', workId)
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      
+      // Transform to your expected format
+      return (data || []).map((comment: any) => ({
+        id: comment.id,
+        workId: comment.work_id,
+        userId: comment.user_id,
+        text: comment.text,
+        createdAt: new Date(comment.created_at),
+        userName: comment.user?.display_name || comment.user?.username || 'Anonymous',
+        user: comment.user ? {
+          id: comment.user.id,
+          username: comment.user.username,
+          displayName: comment.user.display_name,
+          avatarUrl: comment.user.avatar_url
+        } : undefined
+      }));
+    }, 'getComments');
+    
+    return result.data ?? [];
+  },
+  
+  async addComment(workId: string, text: string): Promise<SocialResult<any>> {
+    return safeSocialQuery(async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Validation
+      const trimmedText = text.trim();
+      if (!trimmedText) {
+        throw new Error('Comment cannot be empty');
+      }
+      if (trimmedText.length > 500) {
+        throw new Error('Comment is too long (max 500 characters)');
+      }
+      
+      const { data, error } = await supabase
+        .from('comments')
+        .insert({
+          work_id: workId,
+          user_id: userData.user.id,
+          text: trimmedText
+        })
+        .select(`
+          *,
+          user:users(id, username, display_name, avatar_url)
+        `)
+        .single();
+      
+      if (error) throw error;
+      
+      // Return in your expected format
+      return {
+        id: data.id,
+        workId: data.work_id,
+        userId: data.user_id,
+        text: data.text,
+        createdAt: new Date(data.created_at),
+        userName: data.user?.display_name || data.user?.username || 'Anonymous',
+        user: data.user ? {
+          id: data.user.id,
+          username: data.user.username,
+          displayName: data.user.display_name,
+          avatarUrl: data.user.avatar_url
+        } : undefined
+      };
+    }, 'addComment');
+  },
+  
+  async deleteComment(commentId: string): Promise<SocialResult<void>> {
+    return safeSocialQuery(async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Verify ownership first
+      const { data: comment, error: fetchError } = await supabase
+        .from('comments')
+        .select('user_id')
+        .eq('id', commentId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      if (comment.user_id !== userData.user.id) {
+        throw new Error('You can only delete your own comments');
+      }
+      
+      const { error: deleteError } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId);
+      
+      if (deleteError) throw deleteError;
+    }, 'deleteComment');
+  },
+  
+  // ✅ FOLLOWS =========================================
+  
+  async followUser(followerId: string, followingId: string): Promise<SocialResult<boolean>> {
+    return safeSocialQuery(async () => {
+      if (followerId === followingId) {
+        throw new Error('Cannot follow yourself');
+      }
+      
+      const { error } = await supabase
         .from('follows')
         .insert({
           follower_id: followerId,
           following_id: followingId
-        })
-        .select()
-        .single();
-  
+        });
+      
       if (error) {
-        console.error('❌ Follow error:', error);
-        
-        // Handle unique constraint violation gracefully
+        // If already following, that's okay
         if (error.code === '23505') {
-          console.log('ℹ️ Already following this user (caught by constraint)');
-          return true; // Still return success since they're already following
+          return true;
         }
         throw error;
       }
-  
-      console.log('✅ Successfully followed user:', data);
+      
       return true;
-    } catch (error) {
-      console.error('❌ Error following user:', error);
-      throw error;
-    }
+    }, 'followUser');
   },
-
-  async unfollowUser(followerId: string, followingId: string): Promise<boolean> {
-    try {
+  
+  async unfollowUser(followerId: string, followingId: string): Promise<SocialResult<boolean>> {
+    return safeSocialQuery(async () => {
       const { error } = await supabase
         .from('follows')
         .delete()
         .eq('follower_id', followerId)
         .eq('following_id', followingId);
-
+      
       if (error) throw error;
       return true;
-    } catch (error) {
-      console.error('Error unfollowing user:', error);
-      throw error;
-    }
+    }, 'unfollowUser');
   },
-
+  
   async isFollowing(followerId: string, followingId: string): Promise<boolean> {
-    try {
+    const result = await safeSocialQuery(async () => {
       const { data, error } = await supabase
         .from('follows')
         .select('id')
         .eq('follower_id', followerId)
         .eq('following_id', followingId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        throw error;
-      }
+        .maybeSingle();
       
-      return !!data; // Returns true if follow relationship exists
-    } catch (error) {
-      console.error('Error checking follow status:', error);
-      return false;
-    }
-  },
-  async getFollowerCount(userId: string): Promise<number> {
-    try {
-      const { count, error } = await supabase
-        .from('follows')
-        .select('*', { count: 'exact', head: true })
-        .eq('following_id', userId); // People who follow this user
-
       if (error) throw error;
-      return count || 0;
-    } catch (error) {
-      console.error('Error getting follower count:', error);
-      return 0;
-    }
-  },
-
-  async getFollowingCount(userId: string): Promise<number> {
-    try {
-      const { count, error } = await supabase
-        .from('follows')
-        .select('*', { count: 'exact', head: true })
-        .eq('follower_id', userId); // People this user follows
-
-      if (error) throw error;
-      return count || 0;
-    } catch (error) {
-      console.error('Error getting following count:', error);
-      return 0;
-    }
+      return !!data;
+    }, 'isFollowing');
+    
+    return result.data ?? false;
   },
   
-  async getFollowers(userId: string): Promise<string[]> {
-    try {
-      const { data, error } = await supabase
+  async getFollowerCount(userId: string): Promise<number> {
+    const result = await safeSocialQuery(async () => {
+      const { count, error } = await supabase
         .from('follows')
-        .select('follower_id')
+        .select('*', { count: 'exact', head: true })
         .eq('following_id', userId);
-
-      if (error) throw error;
-      return data.map(item => item.follower_id);
-    } catch (error) {
-      console.error('Error getting followers:', error);
-      return [];
-    }
-  },
-
-  async getFollowing(userId: string): Promise<string[]> {
-    try {
-      const { data, error } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', userId);
-
-      if (error) throw error;
-      return data.map(item => item.following_id);
-    } catch (error) {
-      console.error('Error getting following:', error);
-      return [];
-    }
-  },
-
-  // Bonus: Get mutual follows
-  async getMutualFollows(userId1: string, userId2: string): Promise<boolean> {
-    try {
-      const [user1FollowsUser2, user2FollowsUser1] = await Promise.all([
-        this.isFollowing(userId1, userId2),
-        this.isFollowing(userId2, userId1)
-      ]);
       
-      return user1FollowsUser2 && user2FollowsUser1;
-    } catch (error) {
-      console.error('Error checking mutual follows:', error);
-      return false;
-    }
+      if (error) throw error;
+      return count ?? 0;
+    }, 'getFollowerCount');
+    
+    return result.data ?? 0;
+  },
+  
+  async getFollowingCount(userId: string): Promise<number> {
+    const result = await safeSocialQuery(async () => {
+      const { count, error } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', userId);
+      
+      if (error) throw error;
+      return count ?? 0;
+    }, 'getFollowingCount');
+    
+    return result.data ?? 0;
   }
 };

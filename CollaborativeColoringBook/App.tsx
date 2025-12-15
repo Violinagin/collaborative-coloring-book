@@ -15,7 +15,6 @@ import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import GalleryHeaderRight from './components/GalleryHeaderRight';
-import DebugScreen from './screens/DebugScreen';
 //import SkiaColoringScreen from './screens/SkiaColoringScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 //import { Skia } from '@shopify/react-native-skia';
@@ -26,8 +25,6 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function Navigation() {
   const { user, loading } = useAuth();
-
-  console.log('🔐 Auth state:', { user, loading });
 
   return (
     <NavigationContainer>
@@ -63,14 +60,9 @@ function Navigation() {
             <Stack.Screen 
               name="Upload" 
               component={UploadScreen}
-              options={{ title: 'Upload Line Art', headerRight: () => <HeaderRight />
+              options={{ title: 'Upload Original Art', headerRight: () => <HeaderRight />
              }}
             />
-            <Stack.Screen 
-  name="Debug" 
-  component={DebugScreen}
-  options={{ title: 'Debug Tools' }}
-/>
             <Stack.Screen 
               name="CreateRemix" 
               component={CreateRemixScreen}

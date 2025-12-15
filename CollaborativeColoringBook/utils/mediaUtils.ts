@@ -24,21 +24,21 @@ export const MEDIA_TYPE_CONFIGS: MediaTypeConfig[] = [
     value: 'line_art', 
     emoji: '✏️', 
     label: 'Line Art', 
-    description: 'Black and white drawings ready for coloring',
+    description: 'Black and white illustrations',
     color: '#3b82f6'
   },
   { 
     value: 'colored_art', 
     emoji: '🎨', 
     label: 'Colored Art', 
-    description: 'Already colored artwork',
+    description: 'A splash of color',
     color: '#8b5cf6'
   },
   { 
     value: 'digital_art', 
     emoji: '🖥️', 
     label: 'Digital Art', 
-    description: 'Finished digital paintings and illustrations',
+    description: 'Digital paintings and illustrations',
     color: '#10b981'
   },
   { 
@@ -217,5 +217,19 @@ export const mediaUtils = {
       return config.style || null;
     }
     return null;
-  }
+  },
+  getMediaTypeForDisplay(work: CreativeWork): {
+    label: string;
+    emoji: string;
+    color: string;
+    description: string;
+  } {
+    const config = this.getMediaTypeConfig(work.mediaType);
+    return {
+      label: config.label,
+      emoji: config.emoji,
+      color: config.color,
+      description: config.description
+    };
+  },
 };

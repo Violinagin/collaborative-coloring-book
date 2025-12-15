@@ -20,14 +20,6 @@ const HeaderRight = ({
   const navigation = useNavigation() as any;
   const { user, session, loading } = useAuth();
 
-  // DEBUG LOG, can remove in production)
-  console.log('🔍 HeaderRight Auth State:', { 
-    user: user?.username || 'null', 
-    session: session ? 'exists' : 'null',
-    loading 
-  });
-
-
   const handleUploadPress = () => {
     if (!user) {
       // Redirect to auth if not logged in
@@ -61,7 +53,7 @@ const HeaderRight = ({
       {showFilterButton && (
         <TouchableOpacity 
           onPress={onFilterPress || handleDefaultFilterPress}
-          style={[{ marginRight: 4 }, filterButtonStyle]}
+          style={[{ marginRight: 8 }, filterButtonStyle]}
         >
           <Text style={{ fontSize: 24 }}>{filterButtonEmoji}</Text>
         </TouchableOpacity>
@@ -72,12 +64,12 @@ const HeaderRight = ({
         <>
           <TouchableOpacity 
             onPress={handleUploadPress}
-            style={{ marginRight: 4 }}
+            style={{ marginRight: 8 }}
           >
             <Text style={{ fontSize: 24 }}>📤</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleProfilePress}>
-            <Text style={{ fontSize: 24 }}>👤</Text>
+            <Text style={{ fontSize: 24, marginRight: 8 }}>👤</Text>
           </TouchableOpacity>
         </>
       ) : (

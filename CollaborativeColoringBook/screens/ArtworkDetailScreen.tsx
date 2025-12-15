@@ -1,5 +1,5 @@
 // screens/ArtworkDetailScreen.tsx
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -11,7 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform, 
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { CreativeWork, WorkWithContext, User } from '../types/core';
@@ -24,6 +26,8 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 import { AlertModal } from '../components/AlertModal';
 import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
 import { RemixButton } from '../components/RemixButton';
+import MediaTypeBadge from '../components/MediaTypeBadge';
+import WorkTypeBadge from '../components/WorkTypeBadge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
@@ -47,6 +51,7 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   
 const isOwner = currentUser?.id === workContext?.work.artistId;
 
@@ -96,31 +101,37 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
       const work = await worksService.getWorkWithContext(workId);
       setWorkContext(work);
       
-      // Load real-time data (likes/comments) - we'll update these services next
+      // Load real-time data - any of these could fail
+    try {
       const [likeCount, workComments, liked] = await Promise.all([
         socialService.getLikeCount(workId),
         socialService.getComments(workId),
-        currentUser ? socialService.isLiked(workId) : false
+        currentUser ? socialService.isLiked(workId, currentUser?.id) : false
       ]);
       
       setRealLikeCount(likeCount);
       setUserLiked(liked);
       setComments(workComments);
-      
-    } catch (error) {
-      console.error('Error loading work data:', error);
-      // Fallback to basic work data
-       // Fallback to basic work data
-  if (workId) {
-    // Create a minimal fallback work context
+    } catch (socialError) {
+      console.warn('⚠️ Social data failed to load:', socialError);
+      // Set defaults but keep the artwork info
+      setRealLikeCount(0);
+      setUserLiked(false);
+      setComments([]);
+    }
+    
+  } catch (error) {
+    console.error('Error loading work data:', error);
+    
+    // Create a more robust fallback
     const fallbackWork: CreativeWork = {
       id: workId,
       title: 'Untitled Artwork',
-      description: 'Could not load artwork details',
-      artistId: 'unknown', // We don't know the artist without fetching
+      description: 'Could not load artwork details. Please check your connection.',
+      artistId: 'unknown',
       mediaType: 'line_art',
-      assetUrl: '', // No image URL
-      mediaConfig: { isColorable: true, complexity: 'medium' },
+      assetUrl: '', 
+      mediaConfig: { isColorable: false, complexity: 'medium' },
       originalWorkId: undefined,
       derivationChain: [],
       metadata: {},
@@ -148,41 +159,51 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
       remixes: [],
       siblings: []
     });
-  } else {
-    // No workId at all - show error
-    showAlert('Error', 'Artwork not found');
-    navigation.goBack();
+    
+    // Show a user-friendly error
+    showAlert('Load Error', 'Could not load artwork details. Some features may be limited.', 'error');
+  } finally {
+    setLoading(false);
   }
-    } finally {
-      setLoading(false);
-    }
-  };
+};
+
+const onRefresh = useCallback(async () => {
+  setRefreshing(true);
+  await loadWorkData(workId);
+  setRefreshing(false);
+}, [workId]);
+
 
   const handleAddComment = async () => {
 
-    console.log('💬 handleAddComment called with:', {
-      newComment: newComment, // What's actually in the input?
-      workId: workContext?.work.id,
-      userId: currentUser?.id
-    });
-
     if (!currentUser || !workContext) return;
     
-    if (!newComment.trim()) return;
+    const commentText = newComment.trim();
+  if (!commentText) return;
+  
+  setSubmittingComment(true);
+  
+  try {
+    // Use the robust service
+    const result = await socialService.addComment(workContext.work.id, commentText);
     
-    setSubmittingComment(true);
-    try {
-      const newCommentObj = await socialService.addComment(workContext.work.id, newComment.trim());
-      setComments(prev => [...prev, newCommentObj]);
+    if (result.success && result.data) {
+      // Success - add comment to list
+      setComments(prev => [...prev, result.data!]);
       setNewComment('');
       showAlert('Success', 'Comment added successfully', 'success');
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      showAlert('Error', 'Failed to add comment', 'error');
-    } finally {
-      setSubmittingComment(false);
+    } else {
+      // Service returned an error
+      showAlert('Error', result.error || 'Failed to add comment', 'error');
     }
-  };
+  } catch (error) {
+    // This catches unexpected errors
+    console.error('Unexpected error adding comment:', error);
+    showAlert('Error', 'An unexpected error occurred', 'error');
+  } finally {
+    setSubmittingComment(false);
+  }
+};
 
   const handleDeleteComment = (commentId: string) => {
     setCommentToDelete(commentId);
@@ -194,16 +215,18 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
     
     setDeletingCommentId(commentToDelete);
     try {
-      await socialService.deleteComment(commentToDelete);
+      const result = await socialService.deleteComment(commentToDelete);
       
-      // Refresh comments
-      await loadComments();
-      
-      showAlert('Success', 'Comment deleted successfully', 'success');
-      
-    } catch (error: any) {
-      console.error('❌ Error deleting comment:', error);
-      showAlert('Error', error.message || 'Failed to delete comment', 'error');
+      if (result.success) {
+        // Remove from local state
+        setComments(prev => prev.filter(c => c.id !== commentToDelete));
+        showAlert('Success', 'Comment deleted successfully', 'success');
+      } else {
+        showAlert('Error', result.error || 'Failed to delete comment', 'error');
+      }
+    } catch (error) {
+      console.error('❌ Unexpected error deleting comment:', error);
+      showAlert('Error', 'An unexpected error occurred', 'error');
     } finally {
       setDeletingCommentId(null);
       setShowDeleteCommentModal(false);
@@ -313,7 +336,15 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
         }}
         type="danger"
       />
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#007AFF']}
+        />
+      }
+    >
         {/* Work Image */}
         <Image 
           source={{ uri: currentWork.assetUrl }} 
@@ -323,7 +354,7 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
         
         {/* Work Info */}
         <View style={styles.infoContainer}>
-          <Text style={styles.title}>{workId.title}</Text>
+        <Text style={styles.title}>{currentWork.title}</Text>
           
           <TouchableOpacity 
   onPress={() => {
@@ -340,19 +371,23 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
   </Text>
 </TouchableOpacity>
           
-          {/* Work Type Badge */}
-          <View style={styles.workTypeBadge}>
-            <Text style={styles.workTypeText}>
-              {mediaUtils.getMediaTypeLabel(workId?.mediaType)}
-            </Text>
-            {mediaUtils.isColorable(workId) && (
-              <Text style={styles.colorableBadge}>🖍️ Colorable</Text>
-            )}
-          </View>
+<View style={styles.badgeContainer}>
+      
+  <MediaTypeBadge 
+    mediaType={currentWork.mediaType}
+    size="medium"
+    variant="default"
+  />
+  
+  <WorkTypeBadge 
+    isOriginal={!currentWork.originalWorkId}
+    size="medium"
+  />
+</View>
           
-          {workId.description && (
-            <Text style={styles.description}>{workId?.description}</Text>
-          )}
+{currentWork.description && (
+  <Text style={styles.description}>{currentWork.description}</Text>
+)}
           
           {/* Collaboration Chain */}
           {originalWork && (
@@ -394,31 +429,10 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
                )}
             </TouchableOpacity>
             )}
-            {/* {mediaUtils.isColorable(work) && (
-              // <TouchableOpacity 
-              // style={styles.button}
-              // onPress={() => {
-              //   console.log('🎨 Color This button pressed');
-              //   console.log('📦 Artwork data:', work);
-              //   console.log('🆔 Artwork ID:', work.id);
-              //   console.log('📱 Navigation object:', navigation);
-                
-              //   // Test if navigation works at all
-              //   navigation.navigate('SkiaColoring', { 
-              //     imageUrl: currentWork.assetUrl,
-              //     title: currentWork.title 
-              //   });
-              // }}
-              // >
-              //   <Text style={styles.buttonText}>🎨 Color This</Text>
-              // </TouchableOpacity>
-            )
-            } */}
-            
-            {/* Future: Add other collaboration buttons based on media type */}
+          
             <RemixButton 
-              workId={workId.id}
-              workTitle={workId.title}
+              workId={currentWork.id}
+              workTitle={currentWork.title}
               style={{ marginBottom: 12 }}
             />
           </View>
@@ -565,14 +579,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     marginRight: 8,
-  },
-  colorableBadge: {
-    fontSize: 14,
-    backgroundColor: '#d4edda',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    color: '#155724',
   },
   description: {
     fontSize: 16,
@@ -735,6 +741,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+  },
+  mediaDetailsText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  tags: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontStyle: 'italic',
   },
 });
 

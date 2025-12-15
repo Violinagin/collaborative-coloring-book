@@ -32,7 +32,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (loading) {
-        console.log('⏰ Safety timeout: Forcing loading to false');
         setLoading(false);
         setAuthChecked(true);
       }
@@ -49,21 +48,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   useEffect(() => {
-    console.log('🔐 AuthContext initializing...');
     const initializeAuthState = async () => {
       try {
         // 1. First, initialize auth from storage
-        console.log('🔄 Checking stored auth session...');
         const storedAuth = await initializeAuth();
-        console.log('🔄 Stored auth result:', { 
-          hasUser: !!storedAuth?.user,
-          hasToken: !!storedAuth?.token 
-        });
   
         // 2. THEN get the current session
-        console.log('🔐 Getting current session...');
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('🔐 Initial session:', session ? 'exists' : 'null');
         
         setSession(session);
         if (session?.user) {
@@ -74,7 +65,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   
         // 3. Set up auth state change listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          console.log('🔐 Auth state changed:', event, 'Session:', session ? 'exists' : 'null');
           setSession(session);
           if (session?.user) {
             await loadUserProfile(session.user.id);
@@ -108,9 +98,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   
     try {
-      console.log('👤 Loading user profile for:', userId);
       const userProfile = await userService.getUser(userId);
-      console.log('✅ User profile loaded (or fallback created)');
       setUser(userProfile);
     } catch (error) {
       console.error('❌ Error in loadUserProfile:', error);
@@ -123,15 +111,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           bio: undefined,
           roles: ['supporter'],
           joinedDate: new Date(),
-          uploadedArtworks: [],
-          colorizedVersions: [],
-          likedArtworks: [],
         };
         setUser(fallbackUser);
       } finally {
         // CRITICAL: Always set loading to false
         setLoading(false);
-        console.log('✅ AuthContext: Loading set to false');
       }
     };
   

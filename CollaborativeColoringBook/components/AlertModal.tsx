@@ -8,6 +8,7 @@ interface AlertModalProps {
   message: string;
   onClose: () => void;
   type?: 'success' | 'error' | 'info';
+  buttonText?: string;
 }
 
 export const AlertModal: React.FC<AlertModalProps> = ({
@@ -15,7 +16,8 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   title,
   message,
   onClose,
-  type = 'info'
+  type = 'info',
+  buttonText = 'OK'
 }) => {
   const getBackgroundColor = () => {
     switch (type) {
@@ -52,7 +54,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
             style={[styles.button, { backgroundColor: getTextColor() }]}
             onPress={onClose}
           >
-            <Text style={styles.buttonText}>OK</Text>
+            <Text style={styles.buttonText}>{buttonText}</Text>
           </TouchableOpacity>
         </View>
       </View>

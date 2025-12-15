@@ -19,7 +19,8 @@ import { socialService } from '../services/socialService';
 import { CreativeWork, MediaType } from '../types/core';
 import { mediaUtils } from '../utils/mediaUtils';
 import { useAuth } from '../context/AuthContext';
-
+import { WorkTypeBadge } from '../components/WorkTypeBadge';
+import { MediaTypeBadge } from '../components/MediaTypeBadge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 
@@ -43,22 +44,6 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   const [selectedMediaTypes, setSelectedMediaTypes] = useState<MediaType[]>(ALL_MEDIA_TYPES);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'trending'>('recent');
-  const [tapCount, setTapCount] = useState(0);
-  const [lastTap, setLastTap] = useState(0);
-
-  const handleSecretTap = () => {
-    const now = Date.now();
-    if (now - lastTap < 500) { // Double tap within 500ms
-      setTapCount(prev => prev + 1);
-      if (tapCount >= 2) { // Triple tap
-        navigation.navigate('Debug');
-        setTapCount(0);
-      }
-    } else {
-      setTapCount(1);
-    }
-    setLastTap(now);
-  };  
 
   useFocusEffect(
     useCallback(() => {
@@ -72,14 +57,11 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   );
 
   const loadWorks = async () => {
-    console.log('🚀 === loadWorks START ===', Date.now());
     try {
       setLoading(true);
       
       // Get ALL works (not just colorable)
       const allWorks = await worksService.getAllWorks();
-      console.log('📊 Loaded', allWorks.length, 'works total');
-      console.log('☔️First work artist data:', works[0]?.artist);
       
       setWorks(allWorks);
       applyFilters(allWorks, selectedMediaTypes, sortBy);
@@ -103,7 +85,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
       const [likeCount, workComments, isLiked] = await Promise.all([
         socialService.getLikeCount(work.id),        
         socialService.getComments(work.id),         
-        user ? socialService.isLiked(work.id) : false
+        user ? socialService.isLiked(work.id, user.id) : false
       ]);
         
         return { 
@@ -211,23 +193,26 @@ const GalleryScreen = ({ navigation, route }: Props) => {
       navigation.navigate('Auth');
       return;
     }
+    
+    // 1. CAPTURE current state BEFORE optimistic update
+    const currentLikeState = likeData[workId]?.isLiked || false;
+    const currentCount = likeData[workId]?.count || 0;
+    
+    // 2. OPTIMISTIC update
+    setLikeData(prev => ({
+      ...prev,
+      [workId]: {
+        count: currentLikeState ? currentCount - 1 : currentCount + 1,
+        isLiked: !currentLikeState
+      }
+    }));
+  
     try {
-      // Optimistic update
-      const currentLikeState = likeData[workId]?.isLiked || false;
-      const currentCount = likeData[workId]?.count || 0;
-
-      setLikeData(prev => ({
-        ...prev,
-        [workId]: {
-          count: currentLikeState ? currentCount - 1 : currentCount + 1,
-          isLiked: !currentLikeState
-        }
-      }));
-
-    const nowLiked = await socialService.toggleLike(workId, user.id);
-    const newLikeCount = await socialService.getLikeCount(workId);
+      // 3. API CALL (same as yours)
+      const nowLiked = await socialService.toggleLike(workId, user.id);
+      const newLikeCount = await socialService.getLikeCount(workId);
       
-      // Update with actual database state
+      // 4. SYNC with server (handles race conditions)
       setLikeData(prev => ({
         ...prev,
         [workId]: {
@@ -238,7 +223,18 @@ const GalleryScreen = ({ navigation, route }: Props) => {
       
     } catch (error) {
       console.error('Error toggling like:', error);
-      loadWorks(); // Reload to get correct state
+      
+      // 5. ROLLBACK - just this one work's like state
+      setLikeData(prev => ({
+        ...prev,
+        [workId]: {
+          count: currentCount,    // ← Rollback to original count
+          isLiked: currentLikeState   // ← Rollback to original state
+        }
+      }));
+      
+      // 6. TARGETED error feedback (optional)
+      // showAlert('Like Failed', 'Could not update like. Please try again.', 'error');
     }
   };
 
@@ -246,6 +242,10 @@ const GalleryScreen = ({ navigation, route }: Props) => {
     const likeInfo = likeData[item.id] || { count: 0, isLiked: false };
     const commentCount = commentData[item.id] || 0;
     const artistDisplayName = item.artist?.displayName || 'Unknown Artist';
+
+    // Determine if this is an original or a remix
+    const isRemix = !!item.originalWorkId;
+    const isOriginal = !isRemix;
     
     return (
       <TouchableOpacity 
@@ -264,7 +264,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
           <TouchableOpacity 
             onPress={() => navigation.navigate('Profile', { userId: item.artistId })}
           >
-            <Text style={styles.artist}>by User {artistDisplayName}</Text>
+            <Text style={styles.artist}>by {artistDisplayName}</Text>
           </TouchableOpacity>
           
           {item.description && (
@@ -272,25 +272,22 @@ const GalleryScreen = ({ navigation, route }: Props) => {
               {item.description}
             </Text>
           )}
-          
-          {/* Media Type Badge */}
-          <View style={styles.workMeta}>
-            <Text style={[
-              styles.mediaTypeBadge,
-              { backgroundColor: mediaUtils.getMediaTypeColor(item.mediaType) }
-            ]}>
-              {mediaUtils.getMediaTypeLabel(item.mediaType)}
-            </Text>
-            
-            {mediaUtils.isColorable(item) && (
-              <Text style={styles.colorableBadge}>🎨 Colorable</Text>
-            )}
-            
-            {/* Remix Chain Indicator */}
-            {item.originalWorkId && (
-              <Text style={styles.remixBadge}>🔄 Remix</Text>
-            )}
-          </View>
+          {/* Badges Row */}
+        <View style={styles.badgesContainer}>
+          {/* Media Type Badge - Always show */}
+          <MediaTypeBadge 
+            mediaType={item.mediaType}
+            size="small"
+            variant="default"
+           />
+
+          {/* Show Original or Remix badge */}
+          {isOriginal ? (
+          <WorkTypeBadge isOriginal={true} size="small" />
+            ) : (
+          <WorkTypeBadge isOriginal={false} size="small" />
+          )}
+        </View>
           
           {/* Social Actions */}
           <View style={styles.actionsRow}>
@@ -321,17 +318,8 @@ const GalleryScreen = ({ navigation, route }: Props) => {
                 originalWorkTitle: item.title
               })}
             >
-              <Text style={styles.remixButtonText}>🎵 Remix</Text>
+              <Text style={styles.remixButtonText}>🔄 Remix</Text>
             </TouchableOpacity>
-            
-            {/* {mediaUtils.isColorable(item) && (
-              <TouchableOpacity 
-                style={styles.colorButton}
-                onPress={() => navigation.navigate('SkiaColoring', { work: item })}
-              >
-                <Text style={styles.colorButtonText}>🎨 Color</Text>
-              </TouchableOpacity>
-            )} */}
           </View>
         </View>
       </TouchableOpacity>
@@ -431,7 +419,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   }
 
   return (
-    <View style={styles.container} onTouchStart={handleSecretTap}>
+    <View style={styles.container}>
       
       {/* Active filters summary */}
       <View style={styles.activeFilters}>
@@ -489,22 +477,6 @@ const styles = StyleSheet.create({
   activeFiltersText: {
     fontSize: 12,
     color: '#64748b',
-  },
-  mediaTypeBadge: {
-    fontSize: 11,
-    color: 'white',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  remixBadge: {
-    fontSize: 11,
-    color: '#7c3aed',
-    backgroundColor: '#f5f3ff',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
   },
   remixButton: {
     paddingHorizontal: 12,
@@ -769,6 +741,13 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 8,
   },
 });
 
