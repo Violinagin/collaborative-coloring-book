@@ -14,48 +14,72 @@ export const storageService = {
     onProgress?: (progress: number) => void
   ): Promise<ServiceResult<string>> {
     try {
-      console.log('📤 Uploading image directly to Supabase Storage...');
-
-      // 1. Extract file info
+      console.log('📤 Starting upload...');
+      
+      // For React Native, we need to handle file:// URIs differently
+      let uploadUri = fileUri;
+      
+      // If it's a file:// URI, we need to use it as-is in FormData
+      // React Native's FormData handles file:// URIs automatically
+      
       const uriParts = fileUri.split('.');
       let fileExt = 'jpg';
+      
       if (uriParts.length > 1) {
-        const ext = uriParts.pop()?.toLowerCase();
-        if (ext && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-          fileExt = ext;
+        const potentialExt = uriParts.pop()?.toLowerCase();
+        if (potentialExt && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(potentialExt)) {
+          fileExt = potentialExt;
         }
       }
       
-      // Create a unique file path in the storage bucket
       const fileName = `${userId}/${Date.now()}.${fileExt}`;
-      console.log('📁 Target path:', fileName);
-
-      // 2. Prepare the file for Supabase (React Native compatible)
-      // Important: The Supabase client expects a Blob or File for the .upload() method.
-      // In React Native, we use fetch() on the local file URI to get a response,
-      // then call .blob() on that response.
-      const response = await fetch(fileUri);
-      const fileBlob = await response.blob(); // This is the key step
-
-      // 3. Upload the Blob directly to the 'artworks' bucket
-      const { data, error } = await supabase.storage
-        .from('artworks') // Make sure this bucket exists!
-        .upload(fileName, fileBlob, {
-          contentType: fileBlob.type, // Automatically set from the Blob
-          upsert: false
-        });
-
-      if (error) {
-        console.error('❌ Supabase storage upload error:', error);
-        throw error; // Let the catch block handle it
+      
+      // ALWAYS use FormData - it works on both platforms
+      const formData = new FormData();
+      
+      // The structure React Native expects
+      formData.append('file', {
+        uri: uploadUri,
+        type: `image/${fileExt}`,
+        name: `upload.${fileExt}`,
+      } as any);
+      
+      // Use Supabase Storage REST API directly
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Missing Supabase credentials');
       }
-
-      // 4. Get the public URL for the uploaded file
-      const { data: { publicUrl } } = supabase.storage
-        .from('artworks')
-        .getPublicUrl(fileName);
-
-      console.log('✅ Direct upload successful. Public URL:', publicUrl);
+      
+      console.log('📤 Uploading to:', `${supabaseUrl}/storage/v1/object/artworks/${fileName}`);
+      
+      const response = await fetch(
+        `${supabaseUrl}/storage/v1/object/artworks/${fileName}`,
+        {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            // Let React Native set Content-Type automatically
+          },
+        }
+      );
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Upload failed:', errorText);
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Upload result:', result);
+      
+      // Construct public URL
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/artworks/${fileName}`;
+      
       return {
         success: true,
         data: publicUrl,
@@ -64,7 +88,6 @@ export const storageService = {
       
     } catch (error: any) {
       console.error('💥 Upload failed:', error);
-      // Your existing error handling logic here
       return {
         success: false,
         data: null,
