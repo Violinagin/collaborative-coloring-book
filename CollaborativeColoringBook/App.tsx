@@ -34,7 +34,7 @@ function Navigation() {
           name="Gallery" 
           component={GalleryScreen}
           options={({ navigation }) => ({ 
-            title: 'Creative Universe',
+            title: 'Fork Art',
             headerRight: () => <GalleryHeaderRight />
           })}
         />
