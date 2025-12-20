@@ -1,6 +1,8 @@
 // services/storageService.ts
 import { supabase } from '../lib/supabase';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 
 type ServiceResult<T> = {
   data: T | null;
@@ -9,19 +11,32 @@ type ServiceResult<T> = {
 };
 
 export const storageService = {
-  async uploadArtworkImage(
-    fileUri: string, 
-    userId: string,
-    onProgress?: (progress: number) => void
-  ): Promise<ServiceResult<string>> {
-    try {
-      console.log('📤 Uploading image to storage...');
-
-      
-     // Convert React Native file URI to blob
-     
-     const response = await fetch(fileUri);
-     const blob = await response.blob();
+    async uploadArtworkImage(
+        fileUri: string, 
+        userId: string,
+        onProgress?: (progress: number) => void
+      ): Promise<ServiceResult<string>> {
+        try {
+          console.log('📤 Uploading image to storage...');
+          
+          let blob: Blob;
+          
+          if (Platform.OS === 'ios' || Platform.OS === 'android') {
+            // REACT NATIVE: Convert file to ArrayBuffer via base64
+            const base64 = await FileSystem.readAsStringAsync(fileUri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            const arrayBuffer = decode(base64);
+            
+            // Convert ArrayBuffer to Blob for consistency
+            const fileExt = this.getFileExtensionFromUri(fileUri);
+            const contentType = this.getContentType(fileExt);
+            blob = new Blob([arrayBuffer], { type: contentType });
+          } else {
+            // WEB: Use fetch
+            const response = await fetch(fileUri);
+            blob = await response.blob();
+          }
 
      // Universal validation using blob (works on web and native)
      await this.validateImageBlob(blob, fileUri);
