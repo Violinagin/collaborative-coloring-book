@@ -6,32 +6,46 @@ interface ConfirmationModalProps {
   visible: boolean;
   title: string;
   message: string;
-  confirmText?: string;
-  cancelText?: string;
   onConfirm: () => void;
   onCancel: () => void;
-  type?: 'danger' | 'warning' | 'info';
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'warning' | 'info' | 'danger';
 }
 
 export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   visible,
   title,
   message,
-  confirmText = 'Delete',
-  cancelText = 'Cancel',
   onConfirm,
   onCancel,
-  type = 'danger'
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  type = 'warning'
 }) => {
-  const getColors = () => {
+  const getBackgroundColor = () => {
     switch (type) {
-      case 'danger': return { bg: '#f8d7da', text: '#721c24', button: '#dc3545' };
-      case 'warning': return { bg: '#fff3cd', text: '#856404', button: '#ffc107' };
-      default: return { bg: '#e7f3ff', text: '#004085', button: '#007AFF' };
+      case 'danger': return '#f8d7da';
+      case 'info': return '#e7f3ff';
+      default: return '#fff3cd'; // warning (yellow)
     }
   };
 
-  const colors = getColors();
+  const getTextColor = () => {
+    switch (type) {
+      case 'danger': return '#721c24';
+      case 'info': return '#004085';
+      default: return '#856404'; // warning
+    }
+  };
+
+  const getConfirmButtonColor = () => {
+    switch (type) {
+      case 'danger': return '#dc3545';
+      case 'info': return '#007bff';
+      default: return '#ffc107'; // warning
+    }
+  };
 
   return (
     <Modal
@@ -41,22 +55,24 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       onRequestClose={onCancel}
     >
       <View style={styles.overlay}>
-        <View style={[styles.modal, { backgroundColor: colors.bg }]}>
-          <Text style={[styles.title, { color: colors.text }]}>
+        <View style={[styles.modal, { backgroundColor: getBackgroundColor() }]}>
+          <Text style={[styles.title, { color: getTextColor() }]}>
             {title}
           </Text>
-          <Text style={[styles.message, { color: colors.text }]}>
+          <Text style={[styles.message, { color: getTextColor() }]}>
             {message}
           </Text>
-          <View style={styles.buttonsContainer}>
+          
+          <View style={styles.buttonContainer}>
             <TouchableOpacity 
               style={[styles.button, styles.cancelButton]}
               onPress={onCancel}
             >
               <Text style={styles.cancelButtonText}>{cancelText}</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity 
-              style={[styles.button, { backgroundColor: colors.button }]}
+              style={[styles.button, { backgroundColor: getConfirmButtonColor() }]}
               onPress={onConfirm}
             >
               <Text style={styles.confirmButtonText}>{confirmText}</Text>
@@ -80,7 +96,6 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 24,
     borderRadius: 12,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -96,13 +111,13 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     lineHeight: 20,
   },
-  buttonsContainer: {
+  buttonContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 12,
-    width: '100%',
   },
   button: {
     flex: 1,
@@ -110,21 +125,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#dee2e6',
   },
   cancelButtonText: {
-    color: '#333',
+    color: '#212529',
     fontWeight: '600',
-    fontSize: 16,
   },
   confirmButtonText: {
     color: 'white',
     fontWeight: '600',
-    fontSize: 16,
   },
 });

@@ -38,15 +38,41 @@ const getContentType = (ext: string): string => {
   }[ext] || 'image/jpeg';
 };
 
+export type UploadController = {
+  cancel: () => void;
+  isCancelled: boolean;
+};
+
 export const storageService = {
+  // Store active upload controllers
+  activeUploads: new Map<string, UploadController>(),
+
   async uploadArtworkImage(
     fileUri: string, 
     fileName?: string,
     onProgress?: (progress: number) => void
   ): Promise<ServiceResult<string>> {
+// Generate a unique ID for this upload
+const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+// Create abort controller for fetch requests
+const abortController = new AbortController();
+
+// Create upload controller
+const uploadController: UploadController = {
+  cancel: () => {
+    console.log(`🚫 Cancelling upload: ${uploadId}`);
+    abortController.abort();
+    uploadController.isCancelled = true;
+    this.activeUploads.delete(uploadId);
+  },
+  isCancelled: false
+};
+
+// Store the controller
+this.activeUploads.set(uploadId, uploadController);
+
     try {
-      console.log('📤 Uploading image...');
-      console.log('📱 Platform:', Platform.OS);
 
       const fileExt = getFileExtension(fileUri);
       const finalFileName = fileName || `artwork_${Date.now()}.${fileExt}`;
@@ -57,7 +83,14 @@ export const storageService = {
 
       if (Platform.OS === 'web') {
         // WEB: Use fetch for Blob
-        const response = await fetch(fileUri);
+        const response = await fetch(fileUri, {
+          signal: abortController.signal
+        });
+        
+        // Check if cancelled during fetch
+        if (uploadController.isCancelled) {
+          throw new Error('Upload cancelled');
+        }
         const blob = await response.blob();
         fileData = blob;
         fileSize = blob.size;
@@ -66,6 +99,11 @@ export const storageService = {
         const fileInfo = await FileSystem.getInfoAsync(fileUri);
         if (!fileInfo.exists) throw new Error('File not found');
         
+       // Check if cancelled
+      if (uploadController.isCancelled) {
+        throw new Error('Upload cancelled');
+      }
+
         fileSize = fileInfo.size || 0;
         
         // Validate file size
@@ -80,17 +118,34 @@ export const storageService = {
             encoding: 'base64' as any
           });
         } catch {
-          // Fallback for older Expo versions
-          const response = await fetch(fileUri);
+          // Fallback for older Expo versions - with abort signal
+          const response = await fetch(fileUri, {
+            signal: abortController.signal
+          });
+          
+          if (uploadController.isCancelled) {
+            throw new Error('Upload cancelled');
+          }
+          
           const blob = await response.blob();
-          base64 = await new Promise((resolve) => {
+          base64 = await new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => {
+              if (uploadController.isCancelled) {
+                reject(new Error('Upload cancelled'));
+                return;
+              }
               const result = reader.result as string;
               resolve(result.split(',')[1]);
             };
+            reader.onerror = () => reject(new Error('Failed to read file'));
             reader.readAsDataURL(blob);
           });
+        }
+
+        // Check if cancelled during file reading
+        if (uploadController.isCancelled) {
+          throw new Error('Upload cancelled');
         }
 
         // Convert base64 to Uint8Array
@@ -106,18 +161,27 @@ export const storageService = {
       if (onProgress) {
         onProgress(30);
         await new Promise(resolve => setTimeout(resolve, 200));
+        if (uploadController.isCancelled) {
+          throw new Error('Upload cancelled');
+        }
         onProgress(70);
       }
-
-      console.log('📁 Uploading to Supabase storage...');
       
-      // Use the supabase client directly
+      if (uploadController.isCancelled) {
+        throw new Error('Upload cancelled');
+      }
+
       const { data, error } = await supabase.storage
         .from('artworks')
         .upload(finalFileName, fileData, {
           contentType: contentType,
           upsert: false
         });
+
+      // Check if cancelled during upload
+      if (uploadController.isCancelled) {
+        throw new Error('Upload cancelled');
+      }
 
       if (error) {
         console.error('❌ Supabase upload error:', error);
@@ -131,7 +195,8 @@ export const storageService = {
         .from('artworks')
         .getPublicUrl(data?.path || finalFileName);
 
-      console.log('✅ Upload successful! URL:', urlData.publicUrl);
+      // Clean up
+      this.activeUploads.delete(uploadId);
       
       return {
         success: true,
@@ -140,13 +205,52 @@ export const storageService = {
       };
 
     } catch (error: any) {
+      // Clean up on error
+      this.activeUploads.delete(uploadId);
       console.error('💥 Upload failed:', error);
+      // Special handling for cancellation
+      if (uploadController.isCancelled || error.name === 'AbortError') {
+        console.log('ℹ️ Upload was cancelled by user');
+        return {
+          success: false,
+          data: null,
+          error: 'Upload cancelled'
+        };
+      }
+      
       return {
         success: false,
         data: null,
         error: error.message || 'Failed to upload image'
       };
     }
+  },
+
+  // Method to cancel a specific upload
+  cancelUpload(uploadId: string): boolean {
+    const controller = this.activeUploads.get(uploadId);
+    if (controller) {
+      controller.cancel();
+      return true;
+    }
+    return false;
+  },
+
+  // Method to cancel all active uploads
+  cancelAllUploads(): void {
+    console.log(`🚫 Cancelling ${this.activeUploads.size} active upload(s)`);
+    this.activeUploads.forEach(controller => controller.cancel());
+    this.activeUploads.clear();
+  },
+
+  // Check if an upload is in progress
+  isUploadInProgress(uploadId: string): boolean {
+    return this.activeUploads.has(uploadId);
+  },
+
+  // Get all active upload IDs
+  getActiveUploads(): string[] {
+    return Array.from(this.activeUploads.keys());
   },
 
   async deleteArtworkImage(fileUrl: string): Promise<void> {
@@ -177,7 +281,6 @@ export const storageService = {
       
       if (error) throw error;
       
-      console.log('✅ Image deleted:', filePath);
     } catch (error) {
       console.error('❌ Delete failed:', error);
       throw error;

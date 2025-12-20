@@ -1,5 +1,5 @@
-// screens/UploadScreen.tsx - PROPERLY UPDATED VERSION
-import React, { useState } from 'react';
+// screens/UploadScreen.tsx - FIXED SYNTAX ERRORS
+import React, { useState, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -14,22 +14,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { RootStackParamList } from '../types/navigation';
 import { worksService } from '../services/worksService';
-import { storageService } from '../services/storageService';
+import { storageService, UploadController } from '../services/storageService';
 import { useAuth } from '../context/AuthContext';
-import { UploadableMediaType, CreativeWork, UploadWork, DerivativeWorkData, RemixType, LineArtConfig, ColoredArtConfig, DigitalArtConfig} from '../types/core';
 import { AlertModal } from '../components/AlertModal';
-import { useRoute } from '@react-navigation/native';
-import { mediaUtils, UploadableMediaTypeConfig } from '../utils/mediaUtils';
+import { ConfirmationModal } from '../components/ConfirmationModal';
+import { mediaUtils } from '../utils/mediaUtils';
 
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Upload'>;
-
-// interface RouteParams {
-//   originalWorkId?: string;
-//   originalWork?: CreativeWork;
-//   remixType?: RemixType;
-//   suggestedMediaType?: string;
-// }
 
 const UploadScreen = ({ navigation, route }: Props) => {
   const { user } = useAuth();
@@ -41,32 +33,37 @@ const UploadScreen = ({ navigation, route }: Props) => {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private' | 'unlisted'>('public');
-
-  //const route = useRoute();
-  // const params = route.params as {
-  //   originalWorkId?: string;
-  //   originalWork?: CreativeWork;
-  // } || {};
-  //const [mediaType, setMediaType] = useState<UploadableMediaType>('line_art');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
   const [createdWorkId, setCreatedWorkId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // For remixes (if coming from Gallery)
   const isRemix = route.params?.originalWorkId;
   const originalWorkId = route.params?.originalWorkId;
   const originalWorkTitle = route.params?.originalWorkTitle;
   
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [showProgress, setShowProgress] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
   const UPLOADABLE_MEDIA_TYPES = mediaUtils.getUploadableMediaTypeConfigs();
+
+  // Cancellation support
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
+  const uploadControllerRef = useRef<UploadController | null>(null);
   
   // ==================== IMAGE PICKER ====================
   const pickImage = async () => {
+    // If already uploading, ask user if they want to cancel
+    if (uploading) {
+      setModalTitle('Upload in Progress');
+      setModalMessage('An upload is currently in progress. Would you like to cancel it and select a new image?');
+      setModalType('info');
+      setShowCancelConfirmModal(true);
+      return;
+    }
+    
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -76,6 +73,21 @@ const UploadScreen = ({ navigation, route }: Props) => {
 
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
+    }
+  };
+
+  // ==================== CANCELLATION HANDLERS ====================
+  const handleCancelUpload = () => {
+    if (currentUploadId) {
+      const cancelled = storageService.cancelUpload(currentUploadId);
+      if (cancelled) {
+        console.log('🚫 Upload cancelled by user');
+        setModalMessage('Upload cancelled');
+        setUploading(false);
+        setUploadProgress(0);
+        setCurrentUploadId(null);
+        uploadControllerRef.current = null;
+      }
     }
   };
   
@@ -109,18 +121,22 @@ const UploadScreen = ({ navigation, route }: Props) => {
     return true;
   };
 
-  // ==================== UPLOAD FUNCTION ====================
-  const handleUpload = async () => {
-    // 1. Validate form
+   // ==================== UPLOAD FUNCTION WITH CANCELLATION ====================
+   const handleUpload = async () => {
     if (!validateForm() || !imageUri) {
-      // validateForm already shows error if imageUri is null
       return;
     }
-
+  
     setUploading(true);
+    setUploadProgress(0);
+    
+    // Generate a unique upload ID for this upload session
+    const uploadId = `upload_${Date.now()}`;
+    setCurrentUploadId(uploadId);
     
     try {
-      let finalImageUrl = imageUri; // Now TypeScript knows imageUri is string
+      let finalImageUrl = imageUri;
+      let wasLocalAsset = false;
       
       const isLocalAsset = imageUri && (
         imageUri.startsWith('file://') || 
@@ -129,30 +145,37 @@ const UploadScreen = ({ navigation, route }: Props) => {
       );
       
       if (isLocalAsset) {
-        console.log('📤 NEEDS UPLOAD: Local/blob asset detected');
-        console.log('📤 Calling storageService.uploadArtworkImage...');
+        wasLocalAsset = true;
         
         const uploadResult = await storageService.uploadArtworkImage(
           imageUri,
-          `artwork_${Date.now()}_${title.replace(/\s+/g, '_')}.jpg`
+          `artwork_${Date.now()}_${title.replace(/\s+/g, '_')}.jpg`,
+          (progress) => {
+            setUploadProgress(progress);
+          }
         );
-
-        console.log('📤 storageService returned:', uploadResult);
+        
+        // Check if upload was cancelled
+        if (uploadResult.error === 'Upload cancelled') {
+          console.log('ℹ️ Upload was cancelled, stopping process');
+          return;
+        }
         
         if (!uploadResult.success) {
-          // Image upload failed
-          console.error('❌ storageService failed:', uploadResult.error);
-          setModalMessage(uploadResult.error || 'Failed to upload image to cloud storage');
+          setModalMessage(uploadResult.error || 'Failed to upload image');
           setShowErrorModal(true);
           setUploading(false);
+          setCurrentUploadId(null);
           return;
         }
         
         finalImageUrl = uploadResult.data!;
-        console.log('✅ Image uploaded to:', finalImageUrl);
+      } else {
+        // Not a local asset - use the URL directly
       }
-
-      // 4. Prepare work data
+      
+      // ========== DATABASE CREATION ==========
+  
       const workData = {
         title: title.trim(),
         description: description.trim(),
@@ -160,17 +183,13 @@ const UploadScreen = ({ navigation, route }: Props) => {
         originalWorkId: isRemix ? originalWorkId : undefined,
         tags: tags,
         visibility: visibility,
-        mediaType: selectedMediaType as any, // Your UploadableMediaType
+        mediaType: selectedMediaType as any,
         mediaConfig: {},
       };
-
-      console.log('🎨 Creating work record in database...');
-
-      // 5. Create work in database
+  
       let result;
       
       if (isRemix && originalWorkId) {
-        // It's a remix
         const remixData = {
           ...workData,
           originalWorkId: originalWorkId,
@@ -180,49 +199,39 @@ const UploadScreen = ({ navigation, route }: Props) => {
         
         result = await worksService.createRemix(remixData);
       } else {
-        // It's an original work
         result = await worksService.createWork(workData);
       }
-
-      // 6. Handle the result
+  
       if (result.success && result.data) {
-        // SUCCESS! 🎉
-        console.log('🔍 FINAL URL TO SAVE:', finalImageUrl);
-  console.log('Valid Supabase URL?', 
-    finalImageUrl?.includes('supabase.co') || 
-    finalImageUrl?.includes('supabase.in') ||
-    finalImageUrl?.includes('storage.googleapis.com')
-  );
         const createdWork = result.data;
         setCreatedWorkId(createdWork.id);
         setModalMessage(`"${createdWork.title}" was created successfully!`);
         setShowSuccessModal(true);
-        console.log('✅ Work created with ID:', createdWork.id);
       } else {
-        // ERROR from service
-        setModalMessage(result.error || 'Failed to save artwork to database');
+        setModalMessage(result.error || 'Failed to save artwork');
         setShowErrorModal(true);
-        console.error('❌ Service error:', result.error);
         
-        // Optional: Try to delete the uploaded image since work creation failed
-        if (finalImageUrl && finalImageUrl !== imageUri) {
+        // Try to delete the uploaded image since work creation failed
+        if (wasLocalAsset && finalImageUrl && finalImageUrl !== imageUri) {
           try {
             await storageService.deleteArtworkImage(finalImageUrl);
-            console.log('🔄 Cleaned up uploaded image');
           } catch (cleanupError) {
             console.warn('⚠️ Could not cleanup image:', cleanupError);
           }
         }
       }
       
-    } catch (error) {
-      // 7. Handle unexpected errors
-      console.error('💥 Unexpected error in upload process:', error);
-      setModalMessage('An unexpected error occurred. Please try again.');
-      setShowErrorModal(true);
+    } catch (error: any) {
+      // Only show error if not cancelled
+      if (error.message !== 'Upload cancelled') {
+        console.error('💥 Upload error:', error);
+        setModalMessage('An unexpected error occurred. Please try again.');
+        setShowErrorModal(true);
+      }
     } finally {
-      // 8. Always stop loading
       setUploading(false);
+      setCurrentUploadId(null);
+      uploadControllerRef.current = null;
     }
   };
 
@@ -242,163 +251,6 @@ const UploadScreen = ({ navigation, route }: Props) => {
       setTagInput('');
     }
   };
-
-  const handleErrorModalClose = () => {
-    setShowErrorModal(false);
-    // Don't clear form on error - user might want to fix and retry
-  };
-  
-  // const createUploadWorkData = (
-  //   title: string,
-  //   description: string,
-  //   storageImageUrl: string,
-  //   mediaType: UploadableMediaType
-  // ): UploadWork => {
-  //   const base = {
-  //     title: title.trim(),
-  //     description: description.trim(),
-  //     assetUrl: storageImageUrl,
-  //     originalWorkId: undefined as string | undefined,
-  //     tags: [] as string[],
-  //     visibility: 'public' as const,
-  //     mediaType: mediaType,
-  //   };
-  
-  //   // Create objects with exact types first, then cast
-  //   if (mediaType === 'line_art') {
-  //     const lineArtWork = {
-  //       ...base,
-  //       mediaType: 'line_art' as const,
-  //       mediaConfig: {
-  //         isColorable: true,
-  //         complexity: 'medium' as const
-  //       }
-  //     };
-  //     // Cast to the specific union member
-  //     return lineArtWork as typeof lineArtWork & UploadWork;
-  //   }
-    
-  //   if (mediaType === 'colored_art') {
-  //     const coloredArtWork = {
-  //       ...base,
-  //       mediaType: 'colored_art' as const,
-  //       mediaConfig: {
-  //         isColorable: true,
-  //         technique: 'flat' as const,
-  //         complexity: 'medium' as const
-  //       }
-  //     };
-  //     return coloredArtWork as typeof coloredArtWork & UploadWork;
-  //   }
-    
-  //   // digital_art
-  //   const digitalArtWork = {
-  //     ...base,
-  //     mediaType: 'digital_art' as const,
-  //     mediaConfig: {
-  //       isColorable: false,
-  //       style: 'painting' as const
-  //     }
-  //   };
-  //   return digitalArtWork as typeof digitalArtWork & UploadWork;
-  // };
-
-  // const showModal = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
-  //   setModalTitle(title);
-  //   setModalMessage(message);
-  //   setModalType(type);
-  //   setModalVisible(true);
-  // };
-
-  // const hideModal = () => {
-  //   setModalVisible(false);
-  // };
-
-  // const handleUpload = async () => {
-    
-  //   if (!user) {
-  //     showModal('Error', 'Please log in to upload works', 'error');
-  //     return;
-  //   }
-  //    // Validate form
-  //    const validationError = validateForm();
-  //    if (validationError) {
-  //      showModal('Validation Error', validationError, 'error');
-  //      return;
-  //    }
-  
-  //   setUploading(true);
-  //   setShowProgress(true);
-  //   setUploadProgress(0);
-
-
-    
-  //   try {
-  //     console.log('🚀 Starting upload flow for user:', user.id);
-      
-  //     // Upload with Progress
-  //     console.log('📤 Step 1: Uploading image to storage...');
-  //     const storageImageUrl = await storageService.uploadArtworkImage(
-  //       imageUri!, 
-  //       user.id,
-  //       (progress) => {
-  //         setUploadProgress(progress);
-  //       }
-  //     );
-      
-  //     console.log('✅ Image uploaded to storage:', storageImageUrl);
-
-  //     const workData: UploadWork = createUploadWorkData(
-  //       title,
-  //       description,
-  //       storageImageUrl,
-  //       mediaType
-  //     );
-
-  //     let createdWork: CreativeWork;
-    
-  //     if (isRemix && originalWork) {
-  //       // Create as remix
-  //       const remixData: DerivativeWorkData = {
-  //         ...workData,
-  //         originalWorkId: originalWork.id,
-  //         remixType: 'remix',
-  //         attribution: `Inspired by "${originalWork.title}" by ${originalWork.artist?.displayName}`
-  //       };
-  //       createdWork = await worksService.createRemix(remixData);
-  //     } else {
-  //       // Create as original work
-  //       createdWork = await worksService.createWork(workData);
-      
-  //     console.log('📦 Work data being created:', workData);
-      
-  //     // Use worksService to create the work record
-      
-  //     console.log('🎉 Work created successfully!');
-  //     console.log('🆔 Work ID:', createdWork.id);
-  //     console.log('🖼️ Work assetUrl:', createdWork.assetUrl);
-  
-  //     showModal('Success!', 'Your artwork has been uploaded and is now live in the gallery!', 'success');
-      
-  //     // Reset form on success
-  //     setTitle('');
-  //     setDescription('');
-  //     setImageUri(null);
-  //     setMediaType('line_art');
-      
-  //   }
-
-      
-  //   } catch (error: any) {
-  //     console.error('💥 Upload failed:', error);
-  //     const errorMessage = error?.message || 'Please try again.';
-  //     showModal('Upload Failed', `Failed to upload artwork: ${errorMessage}`, 'error');
-  //   } finally {
-  //     setUploading(false);
-  //     setShowProgress(false);
-  //     setUploadProgress(0);
-  //   }
-  // };
 
   // ==================== RENDER ====================
   return (
@@ -437,7 +289,32 @@ const UploadScreen = ({ navigation, route }: Props) => {
             </View>
           )}
         </TouchableOpacity>
-        
+
+        {/* Upload Progress & Cancel */}
+        {uploading && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressText}>
+                Uploading... {uploadProgress}%
+              </Text>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setShowCancelConfirmModal(true)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.progressBarBackground}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { width: `${uploadProgress}%` }
+                ]} 
+              />
+            </View>
+          </View>
+        )}
+
         {/* Media Type Selector */}
         <Text style={styles.label}>Media Type</Text>
         <View style={styles.mediaTypeContainer}>
@@ -494,23 +371,53 @@ const UploadScreen = ({ navigation, route }: Props) => {
           </View>
         )}
         
-        {/* Upload Button */}
+        {/* Upload/Cancel Button */}
         <TouchableOpacity
-          style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-          onPress={handleUpload}
-          disabled={uploading}
+          style={[
+            styles.uploadButton, 
+            uploading ? styles.cancelButtonStyle : styles.uploadButtonStyle
+          ]}
+          onPress={uploading ? () => setShowCancelConfirmModal(true) : handleUpload}
         >
           {uploading ? (
-            <ActivityIndicator color="white" />
+            <View style={styles.buttonContent}>
+              <ActivityIndicator color="white" size="small" style={styles.loader} />
+              <Text style={styles.uploadButtonText}>Click to cancel upload...</Text>
+            </View>
           ) : (
             <Text style={styles.uploadButtonText}>
               {isRemix ? 'Create Remix' : 'Upload Artwork'}
             </Text>
           )}
         </TouchableOpacity>
+        
+        {/* Optional: Add a small cancel link below the button */}
+        {uploading && (
+          <TouchableOpacity 
+            style={styles.smallCancelLink}
+            onPress={handleCancelUpload}
+          >
+            <Text style={styles.smallCancelLinkText}>or cancel upload</Text>
+          </TouchableOpacity>
+        )}
       </View>
       
       {/* ==================== MODALS ==================== */}
+      
+     {/* Cancel Confirmation Modal */}
+     <ConfirmationModal
+        visible={showCancelConfirmModal}
+        title="Upload in Progress"
+        message="An upload is currently in progress. Would you like to cancel it?"
+        type="warning"
+        confirmText="Yes, Cancel"
+        cancelText="No, Continue Upload"
+        onConfirm={() => {
+          setShowCancelConfirmModal(false);
+          handleCancelUpload();
+        }}
+        onCancel={() => setShowCancelConfirmModal(false)}
+      />
       
       {/* Success Modal */}
       <AlertModal
@@ -527,7 +434,7 @@ const UploadScreen = ({ navigation, route }: Props) => {
         title="Oops! 😅"
         message={modalMessage}
         type="error"
-        onClose={handleErrorModalClose}
+        onClose={() => setShowErrorModal(false)}
       />
     </ScrollView>
   );
@@ -580,6 +487,80 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#666',
     fontSize: 16,
+  },
+  // Progress styles
+  progressContainer: {
+    marginVertical: 16,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  cancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#ff3b30',
+    borderRadius: 6,
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  loader: {
+    marginRight: 8,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  // Button styles
+  uploadButton: {
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 32,
+    marginBottom: 50,
+  },
+  uploadButtonStyle: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButtonStyle: {
+    backgroundColor: '#ff3b30',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  uploadButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  // Small cancel link
+  smallCancelLink: {
+    alignSelf: 'center',
+    marginTop: -10,
+    marginBottom: 20,
+  },
+  smallCancelLinkText: {
+    color: '#666',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   mediaTypeContainer: {
     flexDirection: 'row',
@@ -636,22 +617,6 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 14,
-  },
-  uploadButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 50,
-  },
-  uploadButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  uploadButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
   },
 });
 

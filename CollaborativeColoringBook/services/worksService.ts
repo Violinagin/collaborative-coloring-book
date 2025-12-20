@@ -172,9 +172,12 @@ export const worksService = {
   
   // ✅ Create work with validation
   async createWork(workData: UploadWork): Promise<ServiceResult<CreativeWork>> {
+    
     return safeQuery(async () => {
+      
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
+        console.error('❌ No user found');
         throw new Error('Not authenticated');
       }
       
@@ -206,14 +209,26 @@ export const worksService = {
         visibility: workData.visibility || 'public',
         metadata: {}
       };
-      
       const { data, error } = await supabase
         .from('works')
         .insert(work)
         .select()
         .single();
+        console.log('📊 Insert response:', { data, error });
       
-      if (error) throw error;
+        if (error) {
+          console.error('❌ Database insert error details:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
+          throw error;
+        }
+        if (!data) {
+          console.error('❌ No data returned from insert, but no error either');
+          throw new Error('Insert succeeded but no data returned');
+        }
       
       // Return the full work
       return this.getWork(data.id);

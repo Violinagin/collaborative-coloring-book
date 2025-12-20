@@ -75,20 +75,15 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       setProfileUser(null); // Reset
       setUserOriginals([]);
       setUserRemixes([]);
-
-      console.log('🔍 Loading profile for user:', userId);
       
       // 1. Load user data using userService
       const userData = await userService.getUser(userId);
       setProfileUser(userData);
-      console.log('✅ User data loaded:', userData.displayName);
       
       // 2. Load ALL artworks once
       let allArtworks: CreativeWork[] = [];
     try {
-      console.log('🖼️ Loading all artworks...');
       allArtworks = await worksService.getAllWorks();
-      console.log(`📊 Loaded ${allArtworks.length} total artworks`);
     } catch (artError) {
       console.warn('⚠️ Could not load artworks, continuing with empty list:', artError);
       // Continue with empty array instead of failing entire profile load
@@ -100,7 +95,6 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         artwork.artistId === userId && !artwork.originalWorkId
       );
       setUserOriginals(userOriginalWorks);
-      console.log(`🎨 User has ${userOriginalWorks.length} original works`);
 
       const userRemixes = allArtworks.filter(artwork => 
         artwork.artistId === userId && artwork.originalWorkId
@@ -109,7 +103,6 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       
       // 4. Load social data - can fail independently
       try {
-        console.log('👥 Loading follower data...');
         if (currentUser && currentUser.id !== userId) {
           const followingStatus = await socialService.isFollowing(currentUser.id, userId);
           setIsFollowing(followingStatus);
@@ -451,7 +444,6 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   };
 
   const renderRemixesTab = () => {
-    console.log(`🔄 Rendering ${userRemixes.length} remixes`);
   
   if (userRemixes.length === 0) {
     return (

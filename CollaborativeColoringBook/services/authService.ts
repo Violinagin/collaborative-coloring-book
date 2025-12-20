@@ -68,14 +68,12 @@ const storage = getStorage();
 // Store auth session
 export const storeAuthSession = async (session: any) => {
   try {
-    console.log('💾 Storing auth session for platform:', Platform.OS);
     if (session?.access_token) {
       await storage.setItem(AUTH_TOKEN_KEY, session.access_token);
     }
     if (session?.user) {
       await storage.setItem(USER_SESSION_KEY, JSON.stringify(session.user));
     }
-    console.log('✅ Auth session stored successfully');
   } catch (error) {
     console.error('❌ Error storing auth session:', error);
   }
@@ -85,7 +83,6 @@ export const storeAuthSession = async (session: any) => {
 export const getAuthToken = async (): Promise<string | null> => {
   try {
     const token = await storage.getItem(AUTH_TOKEN_KEY);
-    console.log('💾 Retrieved auth token:', !!token);
     return token;
   } catch (error) {
     console.error('❌ Error retrieving auth token:', error);
@@ -98,7 +95,6 @@ export const getUserSession = async (): Promise<any | null> => {
   try {
     const userSession = await storage.getItem(USER_SESSION_KEY);
     const parsed = userSession ? JSON.parse(userSession) : null;
-    console.log('💾 Retrieved user session:', !!parsed);
     return parsed;
   } catch (error) {
     console.error('❌ Error retrieving user session:', error);
@@ -109,10 +105,8 @@ export const getUserSession = async (): Promise<any | null> => {
 // Clear auth data on logout
 export const clearAuthSession = async () => {
   try {
-    console.log('🗑️ Clearing auth session');
     await storage.deleteItem(AUTH_TOKEN_KEY);
     await storage.deleteItem(USER_SESSION_KEY);
-    console.log('✅ Auth session cleared');
   } catch (error) {
     console.error('❌ Error clearing auth session:', error);
   }
@@ -122,28 +116,20 @@ export const clearAuthSession = async () => {
 export const isAuthenticated = async (): Promise<boolean> => {
   const token = await getAuthToken();
   const isAuth = !!token;
-  console.log('🔐 Authentication check:', isAuth);
   return isAuth;
 };
 
 // Initialize auth state on app start
 export const initializeAuth = async () => {
   try {
-    console.log('🚀 Initializing auth for platform:', Platform.OS);
     const token = await getAuthToken();
     const userSession = await getUserSession();
     
-    console.log('🚀 Auth initialization results:', { 
-      hasToken: !!token, 
-      hasUser: !!userSession 
-    });
-    
     if (token && userSession) {
-      console.log('🔄 Restoring Supabase session');
       // Restore Supabase session
       const { data, error } = await supabase.auth.setSession({
         access_token: token,
-        refresh_token: '' // You might want to store refresh token too
+        refresh_token: ''
       });
       
       console.log('🔄 Session restoration result:', { data, error });

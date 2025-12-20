@@ -5,7 +5,6 @@ import { transformDatabaseUser, createFallbackUser } from '../utils/userTransfor
 
 export const userService = {
   async getUser(userId: string): Promise<User> {
-    console.log('🔍 [1] userService.getUser called with ID:', userId);
     
     try {
       // Ultra simple query - just get basic user info
@@ -27,7 +26,6 @@ export const userService = {
         return createFallbackUser(userId);
       }
 
-      console.log('✅ User found:', data.username);
       return transformDatabaseUser(data);
       
     } catch (error) {
