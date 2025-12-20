@@ -1,4 +1,4 @@
-// services/storageService.ts - CLEANER VERSION
+// services/storageService.ts - FINAL OPTIMIZED VERSION
 import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -8,6 +8,13 @@ type ServiceResult<T> = {
   error: string | null;
   success: boolean;
 };
+
+// Polyfill for atob if needed (React Native sometimes doesn't have it)
+if (typeof atob === 'undefined') {
+  (global as any).atob = function(b64: string) {
+    return Buffer.from(b64, 'base64').toString('binary');
+  };
+}
 
 // Helper functions
 const getFileExtension = (uri: string): string => {
@@ -145,8 +152,23 @@ export const storageService = {
   async deleteArtworkImage(fileUrl: string): Promise<void> {
     try {
       // Extract file path from URL
-      const url = new URL(fileUrl);
-      const pathParts = url.pathname.split('/');
+      // Handle both URL objects and string URLs
+      let pathname: string;
+      try {
+        const url = new URL(fileUrl);
+        pathname = url.pathname;
+      } catch {
+        // If it's not a valid URL, try to extract manually
+        const urlParts = fileUrl.split('/');
+        const storageIndex = urlParts.findIndex(part => part.includes('storage'));
+        if (storageIndex !== -1) {
+          pathname = '/' + urlParts.slice(storageIndex).join('/');
+        } else {
+          throw new Error('Invalid URL format');
+        }
+      }
+      
+      const pathParts = pathname.split('/');
       const filePath = pathParts.slice(3).join('/'); // Remove /storage/v1/object/
       
       const { error } = await supabase.storage
