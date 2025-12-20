@@ -1,7 +1,7 @@
 // services/storageService.ts - CLEANER VERSION
 import { supabase } from '../lib/supabase';
-import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 
 type ServiceResult<T> = {
   data: T | null;
