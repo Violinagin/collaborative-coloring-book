@@ -9,16 +9,16 @@ const USER_SESSION_KEY = 'supabase_user_session';
 // Web-compatible storage
 const getStorage = () => {
   if (Platform.OS === 'web') {
-    // Use localStorage for web
+    // Web: Wrap localStorage in async functions
     return {
-      setItem: (key: string, value: string) => {
+      setItem: async (key: string, value: string): Promise<void> => {
         try {
           localStorage.setItem(key, value);
         } catch (error) {
           console.error('Error with localStorage:', error);
         }
       },
-      getItem: (key: string) => {
+      getItem: async (key: string): Promise<string | null> => {
         try {
           return localStorage.getItem(key);
         } catch (error) {
@@ -26,7 +26,7 @@ const getStorage = () => {
           return null;
         }
       },
-      deleteItem: (key: string) => {
+      deleteItem: async (key: string): Promise<void> => {
         try {
           localStorage.removeItem(key);
         } catch (error) {
@@ -35,16 +35,16 @@ const getStorage = () => {
       }
     };
   } else {
-    // Use SecureStore for native
+    // Native: Use SecureStore (already async)
     return {
-      setItem: async (key: string, value: string) => {
+      setItem: async (key: string, value: string): Promise<void> => {
         try {
           await SecureStore.setItemAsync(key, value);
         } catch (error) {
           console.error('Error with SecureStore:', error);
         }
       },
-      getItem: async (key: string) => {
+      getItem: async (key: string): Promise<string | null> => {
         try {
           return await SecureStore.getItemAsync(key);
         } catch (error) {
@@ -52,7 +52,7 @@ const getStorage = () => {
           return null;
         }
       },
-      deleteItem: async (key: string) => {
+      deleteItem: async (key: string): Promise<void> => {
         try {
           await SecureStore.deleteItemAsync(key);
         } catch (error) {
