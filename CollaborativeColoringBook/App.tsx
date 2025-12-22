@@ -1,24 +1,20 @@
-import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { storageService } from './services/storageService';
 import GalleryScreen from './screens/GalleryScreen';
-import { View, TouchableOpacity, Text, Alert } from 'react-native';
+import { LogBox } from 'react-native';
 import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
 import { RootStackParamList } from './types/navigation';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProfileScreen from './screens/ProfileScreen';
-//import ColoringScreen from './screens/ColoringScreen';
 import CreateRemixScreen from './screens/CreateRemixScreen';
 import UploadScreen from './screens/UploadScreen';
 import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import GalleryHeaderRight from './components/GalleryHeaderRight';
-//import SkiaColoringScreen from './screens/SkiaColoringScreen';
 import ErrorBoundary from './components/ErrorBoundary';
-//import { Skia } from '@shopify/react-native-skia';
 
+LogBox.ignoreAllLogs(false);
 
 // Create the navigator with your specific types
 const Stack = createNativeStackNavigator<RootStackParamList>();
