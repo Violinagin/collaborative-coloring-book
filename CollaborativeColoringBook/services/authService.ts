@@ -1,5 +1,5 @@
 // services/authService.ts - UPDATED FOR WEB SUPPORT
-import { supabase } from '../lib/supabase';
+import { getSupabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
@@ -122,25 +122,51 @@ export const isAuthenticated = async (): Promise<boolean> => {
 // Initialize auth state on app start
 export const initializeAuth = async () => {
   try {
+    console.log('🔄 Starting auth initialization...');
     const token = await getAuthToken();
     const userSession = await getUserSession();
     
     if (token && userSession) {
-      // Restore Supabase session
-      const { data, error } = await supabase.auth.setSession({
-        access_token: token,
-        refresh_token: ''
-      });
+      console.log('🔑 Found stored token and session');
       
-      console.log('🔄 Session restoration result:', { data, error });
+      // Get supabase client (might be mock if config is missing)
+      const supabase = getSupabase();
       
-      return { user: userSession, token };
+      try {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: token,
+          refresh_token: ''
+        });
+        
+        console.log('🔄 Session restoration result:', { 
+          hasData: !!data, 
+          hasError: !!error,
+          errorMessage: error?.message 
+        });
+        
+        // Return what we have regardless of Supabase success
+        return { 
+          user: userSession, 
+          token, 
+          supabaseRestored: !error,
+          supabaseError: error 
+        };
+      } catch (supabaseError) {
+        console.error('⚠️ Supabase session restore failed:', supabaseError);
+        // Still return local data - don't crash the app!
+        return { 
+          user: userSession, 
+          token, 
+          supabaseRestored: false,
+          supabaseError 
+        };
+      }
     }
     
     console.log('🚀 No stored session found');
     return null;
   } catch (error) {
-    console.error('❌ Error initializing auth:', error);
+    console.error('❌ Error in initializeAuth:', error);
     return null;
   }
 };

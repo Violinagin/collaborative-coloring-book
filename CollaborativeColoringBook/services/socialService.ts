@@ -1,5 +1,5 @@
 // services/socialService.ts
-import { supabase } from '../lib/supabase';
+import { getSupabase } from '../lib/supabase';
 
 // ==================== TYPES ====================
 export type SocialResult<T> = {
@@ -43,6 +43,7 @@ export const socialService = {
   async toggleLike(workId: string, userId: string): Promise<boolean> {
     const result = await safeSocialQuery(async () => {
       // Check if already liked
+      const supabase = getSupabase();
       const { data: existing } = await supabase
         .from('likes')
         .select('id')
@@ -79,6 +80,7 @@ export const socialService = {
   
   async getLikeCount(workId: string): Promise<number> {
     const result = await safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { count, error } = await supabase
         .from('likes')
         .select('*', { count: 'exact', head: true })
@@ -95,6 +97,7 @@ export const socialService = {
     if (!userId) return false;
     
     const result = await safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('likes')
         .select('id')
@@ -113,6 +116,7 @@ export const socialService = {
   
   async getComments(workId: string): Promise<any[]> {
     const result = await safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('comments')
         .select(`
@@ -146,6 +150,7 @@ export const socialService = {
   
   async addComment(workId: string, text: string): Promise<SocialResult<any>> {
     return safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
         throw new Error('Not authenticated');
@@ -195,6 +200,7 @@ export const socialService = {
   
   async deleteComment(commentId: string): Promise<SocialResult<void>> {
     return safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
         throw new Error('Not authenticated');
@@ -228,7 +234,7 @@ export const socialService = {
       if (followerId === followingId) {
         throw new Error('Cannot follow yourself');
       }
-      
+      const supabase = getSupabase();
       const { error } = await supabase
         .from('follows')
         .insert({
@@ -250,6 +256,7 @@ export const socialService = {
   
   async unfollowUser(followerId: string, followingId: string): Promise<SocialResult<boolean>> {
     return safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { error } = await supabase
         .from('follows')
         .delete()
@@ -263,6 +270,7 @@ export const socialService = {
   
   async isFollowing(followerId: string, followingId: string): Promise<boolean> {
     const result = await safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('follows')
         .select('id')
@@ -279,6 +287,7 @@ export const socialService = {
   
   async getFollowerCount(userId: string): Promise<number> {
     const result = await safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { count, error } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
@@ -293,6 +302,7 @@ export const socialService = {
   
   async getFollowingCount(userId: string): Promise<number> {
     const result = await safeSocialQuery(async () => {
+      const supabase = getSupabase();
       const { count, error } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })

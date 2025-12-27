@@ -1,9 +1,10 @@
 // context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { getSupabase } from '../lib/supabase';
 import { User } from '../types/core';
 import { initializeAuth, storeAuthSession, clearAuthSession } from '../services/authService';
 import { userService } from '../services/userService';
+import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 
 type AuthContextType = {
@@ -41,6 +42,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [loading]);
 
   const updateUser = async () => {
+    const supabase = getSupabase();
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       await loadUserProfile(session.user.id);
@@ -54,6 +56,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const storedAuth = await initializeAuth();
   
         // 2. THEN get the current session
+        const supabase = getSupabase();
         const { data: { session } } = await supabase.auth.getSession();
         
         setSession(session);
@@ -64,19 +67,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
   
         // 3. Set up auth state change listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          setSession(session);
-          if (session?.user) {
-            await loadUserProfile(session.user.id);
-            // Store the new session
-            await storeAuthSession(session);
-          } else {
-            setUser(null);
-            setLoading(false);
-            // Clear stored session on logout
-            await clearAuthSession();
-          }
-        });
+        
+const { data: listenerData } = supabase.auth.onAuthStateChange(
+  async (event: AuthChangeEvent, session: Session | null) => {
+    setSession(session);
+    if (session?.user) {
+      await loadUserProfile(session.user.id);
+      await storeAuthSession(session);
+    } else {
+      setUser(null);
+      setLoading(false);
+      await clearAuthSession();
+    }
+  }
+);
+const subscription = listenerData.subscription;
   
         return () => subscription.unsubscribe();
   
@@ -121,6 +126,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   
 
   const signUp = async (email: string, password: string, username: string, displayName: string) => {
+    const supabase = getSupabase();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -151,6 +157,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
     const signIn = async (email: string, password: string) => {
       try {
+        const supabase = getSupabase();
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -175,6 +182,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const signOut = async () => {
     try {
+      const supabase = getSupabase();
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('❌ Sign out error:', error);

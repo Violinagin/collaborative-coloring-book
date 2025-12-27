@@ -1,13 +1,13 @@
 // services/worksService.ts
-import { supabase } from '../lib/supabase';
+import { getSupabase } from '../lib/supabase';
 import { 
   CreativeWork, 
+  DatabaseWork,
   Collaboration, 
   WorkWithContext, 
   User, 
   UploadWork, 
   DerivativeWorkData, 
-  CollaborationType
 } from '../types/core';
 import { storageService } from './storageService';
 import { transformDatabaseUser } from '../utils/userTransformers';
@@ -86,6 +86,7 @@ export const worksService = {
   // ✅ Get work with artist (with fallback)
   async getWork(workId: string): Promise<CreativeWork> {
     const result = await safeQuery(async () => {
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('works')
         .select(`
@@ -117,6 +118,7 @@ export const worksService = {
   // ✅ Get all works (empty array fallback)
   async getAllWorks(): Promise<CreativeWork[]> {
     const result = await safeQuery(async () => {
+      const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
       const currentUserId = userData.user?.id;
       
@@ -154,7 +156,7 @@ export const worksService = {
       
       // Deduplicate
       const uniqueWorksMap = new Map();
-      data?.forEach(dbWork => {
+      data?.forEach((dbWork: any) => {
         if (!uniqueWorksMap.has(dbWork.id)) {
           uniqueWorksMap.set(dbWork.id, dbWork);
         }
@@ -175,6 +177,7 @@ export const worksService = {
     
     return safeQuery(async () => {
       
+      const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
         console.error('❌ No user found');
@@ -238,6 +241,7 @@ export const worksService = {
   // ✅ Delete work with cleanup
   async deleteWork(workId: string): Promise<ServiceResult<void>> {
     return safeQuery(async () => {
+      const supabase = getSupabase();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       
@@ -271,6 +275,7 @@ export const worksService = {
   // ✅ Internal: Get basic work (no joins)
   async getWorkBasic(workId: string): Promise<CreativeWork> {
     const result = await safeQuery(async () => {
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('works')
         .select('*')
@@ -300,6 +305,7 @@ export const worksService = {
       // Get siblings
       let siblings: CreativeWork[] = [];
       if (work.originalWorkId) {
+        const supabase = getSupabase();
         const { data } = await supabase
           .from('works')
           .select('*')
@@ -338,6 +344,7 @@ export const worksService = {
   // ✅ Create remix
   async createRemix(remixData: DerivativeWorkData): Promise<ServiceResult<CreativeWork>> {
     return safeQuery(async () => {
+      const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error('Not authenticated');
       
@@ -427,6 +434,7 @@ export const worksService = {
   // ===== EXISTING HELPER METHODS =====
   async getWorkRemixes(workId: string): Promise<CreativeWork[]> {
     const result = await safeQuery(async () => {
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('works')
         .select('*')
@@ -445,6 +453,7 @@ export const worksService = {
     asDerivative: Collaboration[];
   }> {
     const result = await safeQuery(async () => {
+      const supabase = getSupabase();
       const [asOriginal, asDerivative] = await Promise.all([
         supabase
           .from('collaborations')

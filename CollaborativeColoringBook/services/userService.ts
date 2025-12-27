@@ -1,5 +1,5 @@
 // services/userService.ts - ULTRA SIMPLIFIED
-import { supabase } from '../lib/supabase';
+import { getSupabase } from '../lib/supabase';
 import { User } from '../types/core';
 import { transformDatabaseUser, createFallbackUser } from '../utils/userTransformers';
 
@@ -8,6 +8,7 @@ export const userService = {
     
     try {
       // Ultra simple query - just get basic user info
+      const supabase = getSupabase();
       const { data, error } = await supabase
         .from('users')
         .select('id, username, display_name, avatar_url, bio, roles, created_at')

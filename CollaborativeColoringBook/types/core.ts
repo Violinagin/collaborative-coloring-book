@@ -222,3 +222,33 @@ export interface BasicMediaConfig {
   // Allow any extra data
   [key: string]: any;
 };
+
+export interface DatabaseWork {
+  id: string;
+  title: string;
+  description?: string;
+  asset_url: string;        // snake_case for DB fields
+  media_type: string;
+  artist_id: string;
+  original_work_id?: string;
+  derivation_chain: string[];
+  created_at: string;       // ISO string from DB
+  
+  // Joined tables (as they come from Supabase)
+  artist?: {
+    id: string;
+    username: string;
+    display_name: string;   // snake_case
+    avatar_url?: string;
+  };
+  likes?: Array<{
+    id: string;
+    user_id: string;
+    created_at: string;
+    user: {
+      id: string;
+      username: string;
+      display_name: string;
+    };
+  }>;
+}

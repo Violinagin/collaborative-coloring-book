@@ -1,5 +1,5 @@
 // services/storageService.ts - FINAL OPTIMIZED VERSION
-import { supabase } from '../lib/supabase';
+import { getSupabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -170,7 +170,7 @@ this.activeUploads.set(uploadId, uploadController);
       if (uploadController.isCancelled) {
         throw new Error('Upload cancelled');
       }
-
+      const supabase = getSupabase();
       const { data, error } = await supabase.storage
         .from('artworks')
         .upload(finalFileName, fileData, {
@@ -274,7 +274,7 @@ this.activeUploads.set(uploadId, uploadController);
       
       const pathParts = pathname.split('/');
       const filePath = pathParts.slice(3).join('/'); // Remove /storage/v1/object/
-      
+      const supabase = getSupabase();
       const { error } = await supabase.storage
         .from('artworks')
         .remove([filePath]);

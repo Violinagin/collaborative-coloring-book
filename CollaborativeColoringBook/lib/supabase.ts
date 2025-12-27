@@ -1,31 +1,80 @@
-// lib/supabase.ts - UPDATED WITH API KEY FIX
+// lib/supabase.ts - FIXED VERSION
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+// SAFE environment variable access with fallbacks
+const getSupabaseConfig = () => {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  
+  console.log('🔧 Supabase Config Check:', { 
+    hasUrl: !!supabaseUrl, 
+    hasKey: !!supabaseAnonKey,
+    urlPrefix: supabaseUrl?.slice(0, 20) + '...',
+    keyPrefix: supabaseAnonKey?.slice(0, 10) + '...'
+  });
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('❌ Missing Supabase environment variables!');
+    // Return null instead of crashing
+    return null;
+  }
+  
+  return { supabaseUrl, supabaseAnonKey };
+};
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: false,
-    storage: AsyncStorage,
-    flowType: 'pkce',
-    debug: false,
-  },
-  global: {
-    fetch: (...args) => {
+// Create a LAZY singleton - only creates client when needed
+let supabaseClient: any = null;
+
+export const getSupabase = () => {
+  if (!supabaseClient) {
+    const config = getSupabaseConfig();
+    
+    if (!config) {
+      // Return a mock client that won't crash the app
+      console.warn('⚠️ Using mock Supabase client due to missing config');
+      supabaseClient = {
+        auth: {
+          setSession: async () => ({ data: null, error: new Error('No config') }),
+          getSession: async () => ({ data: { session: null }, error: null }),
+          onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+          signOut: async () => ({ error: null })
+        }
+      };
+    } else {
+      // Create real client
+      supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+          storage: AsyncStorage,
+          flowType: 'pkce',
+          debug: false,
+        },
+        global: {
+          fetch: (...args) => {
+            return fetch(...args)
+              .then(response => response)
+              .catch(error => {
+                console.error('🌐 Supabase Fetch Error:', error);
+                // Don't crash on network errors
+                return new Response(JSON.stringify({ error: 'Network error' }), {
+                  status: 500,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              });
+          },
+        },
+      });
       
-      return fetch(...args)
-        .then(response => {
-          return response;
-        })
-        .catch(error => {
-          console.error('🌐 Supabase Fetch Error:', error);
-          throw error;
-        });
-    },
-  },
-});
+      console.log('✅ Supabase client initialized successfully');
+    }
+  }
+  
+  return supabaseClient;
+};
+
+// For backward compatibility
+export const supabase = getSupabase();
