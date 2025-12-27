@@ -15,6 +15,7 @@ import GalleryHeaderRight from './components/GalleryHeaderRight';
 import ErrorBoundary from './components/ErrorBoundary';
 
 LogBox.ignoreAllLogs(false);
+console.log('build enviornment chech:', !!process.en===================================v.EXPO_PUBLIC_SUPABASE_URL);
 
 // Create the navigator with your specific types
 const Stack = createNativeStackNavigator<RootStackParamList>();
