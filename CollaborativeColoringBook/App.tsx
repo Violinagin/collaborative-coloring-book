@@ -13,6 +13,8 @@ import EditProfileScreen from './screens/EditProfileScreen';
 import HeaderRight from './components/HeaderRight';
 import GalleryHeaderRight from './components/GalleryHeaderRight';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ThemeProvider } from './context/ThemeContext';
+
 
 LogBox.ignoreAllLogs(false);
 
@@ -23,6 +25,7 @@ function Navigation() {
   const { user, loading } = useAuth();
 
   return (
+    <ThemeProvider>
     <NavigationContainer>
       <Stack.Navigator>
         {/* Gallery is always accessible to everyone */}
@@ -89,6 +92,7 @@ function Navigation() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    </ThemeProvider>
   );
 }
 

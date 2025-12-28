@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -22,6 +22,9 @@ import { mediaUtils } from '../utils/mediaUtils';
 import { useAuth } from '../context/AuthContext';
 import { WorkTypeBadge } from '../components/WorkTypeBadge';
 import { MediaTypeBadge } from '../components/MediaTypeBadge';
+import { useTheme } from '../context/ThemeContext';
+import { createGalleryStyles } from '../styles/screenStyles/galleryStyles';
+import { HeartButton } from '../components/shared/HeartButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 
@@ -32,8 +35,13 @@ const ALL_MEDIA_TYPES: MediaType[] = [
 ];
 
 const GalleryScreen = ({ navigation, route }: Props) => {
+  const theme = useTheme();
   const { user } = useAuth();
   const isFocused = useIsFocused();
+
+  // Create memoized styles
+  const styles = useMemo(() => createGalleryStyles(theme), [theme]);
+  
   const [works, setWorks] = useState<CreativeWork[]>([]);
   const [filteredWorks, setFilteredWorks] = useState<CreativeWork[]>([]);
   const [loading, setLoading] = useState(true);
@@ -253,6 +261,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
         style={styles.workCard}
         onPress={() => navigation.navigate('ArtworkDetail', { 
           workId: item.id })}
+          activeOpacity={0.9}
       >
         <Image 
           source={{ uri: item.assetUrl }} 
@@ -292,25 +301,22 @@ const GalleryScreen = ({ navigation, route }: Props) => {
           
           {/* Social Actions */}
           <View style={styles.actionsRow}>
-            <TouchableOpacity 
-              style={[styles.actionButton, likeInfo.isLiked && styles.likedButton]}
-              onPress={() => {
-                handleLike(item.id);
-              }}
-            >
-              <Text style={styles.actionText}>
-                {likeInfo.isLiked ? '❤️' : '🤍'} {likeInfo.count}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('ArtworkDetail', { 
-                workId: item?.id, 
-               })}
-            >
-              <Text style={styles.actionText}>💬 {commentCount}</Text>
-            </TouchableOpacity>
+            <View style={styles.likeCommentRow}>
+              <HeartButton 
+                isLiked={likeInfo.isLiked}
+                onPress={() => handleLike(item.id)}
+                count={likeInfo.count}
+                size="small"
+              />
+              
+              <TouchableOpacity 
+                style={styles.commentButton}
+                onPress={() => navigation.navigate('ArtworkDetail', { workId: item.id })}
+              >
+                <Text>💬</Text>
+                <Text style={styles.commentButtonText}>{commentCount}</Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity 
               style={styles.remixButton}
@@ -347,10 +353,14 @@ const GalleryScreen = ({ navigation, route }: Props) => {
             <Text style={styles.filterTitle}>Media Types</Text>
             <View style={styles.filterActions}>
               <TouchableOpacity onPress={selectAllMediaTypes}>
-                <Text style={styles.filterAction}>Select All</Text>
+              <Text style={[styles.filterAction, { color: theme.colorRoles.social.like }]}>
+                  Select All
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={clearMediaTypes}>
-                <Text style={styles.filterAction}>Clear All</Text>
+                <Text style={[styles.filterAction, { color: theme.palette.semantic.error }]}>
+                  Clear All
+                </Text>
               </TouchableOpacity>
             </View>
             
@@ -369,9 +379,6 @@ const GalleryScreen = ({ navigation, route }: Props) => {
                     selectedMediaTypes.includes(type) && styles.mediaTypeFilterTextSelected
                   ]}>
                     {mediaUtils.getMediaTypeLabel(type)}
-                  </Text>
-                  <Text style={styles.mediaTypeCount}>
-                    ({works.filter(w => w.mediaType === type).length})
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -413,7 +420,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   if (loading && works.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.colorRoles.social.remix} />
         <Text style={styles.loadingText}>Loading creative universe...</Text>
       </View>
     );
@@ -440,7 +447,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#007AFF']}
+            colors={[theme.colorRoles.social.remix]}
           />
         }
         ListEmptyComponent={
@@ -451,6 +458,10 @@ const GalleryScreen = ({ navigation, route }: Props) => {
             </Text>
           </View>
         }
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}     
+        windowSize={10}
+        initialNumToRender={6}
       />
       {renderFilterModal()}
       
@@ -458,6 +469,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
       <TouchableOpacity 
         style={styles.uploadFab}
         onPress={() => navigation.navigate('Upload')}
+        activeOpacity={0.8}
       >
         <Text style={styles.uploadFabText}>+</Text>
       </TouchableOpacity>
@@ -465,291 +477,291 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  activeFilters: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f8fafc',
-  },
-  activeFiltersText: {
-    fontSize: 12,
-    color: '#64748b',
-  },
-  remixButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#7C3AED',
-    borderRadius: 16,
-  },
-  remixButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  closeButton: {
-    fontSize: 24,
-    color: '#64748b',
-  },
-  filterSection: {
-    padding: 20,
-  },
-  filterTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 12,
-  },
-  filterActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  filterAction: {
-    fontSize: 14,
-    color: '#7C3AED',
-    textDecorationLine: 'underline',
-  },
-  mediaTypeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
-  },
-  mediaTypeFilter: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  mediaTypeFilterSelected: {
-    backgroundColor: '#7C3AED',
-  },
-  mediaTypeFilterText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  mediaTypeFilterTextSelected: {
-    color: 'white',
-  },
-  mediaTypeCount: {
-    fontSize: 10,
-    color: '#94a3b8',
-    marginTop: 2,
-  },
-  sortOptions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sortOption: {
-    flex: 1,
-    padding: 12,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  sortOptionSelected: {
-    backgroundColor: '#7C3AED',
-  },
-  sortOptionText: {
-    fontSize: 14,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  sortOptionTextSelected: {
-    color: 'white',
-  },
-  applyButton: {
-    backgroundColor: '#7C3AED',
-    margin: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  applyButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  uploadFab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7C3AED',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  uploadFabText: {
-    fontSize: 24,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-  },
-  gallery: {
-    padding: 8,
-  },
-  workCard: {
-    flex: 1,
-    margin: 8,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  workImage: {
-    width: '100%',
-    height: 350,
-    borderRadius: 8,
-    backgroundColor: '#f8f8f8',
-  },
-  workInfo: {
-    marginTop: 8,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  artist: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginTop: 4,
-    textDecorationLine: 'underline',
-  },
-  description: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  workMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  mediaType: {
-    fontSize: 12,
-    color: '#666',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  colorableBadge: {
-    fontSize: 12,
-    color: '#155724',
-    backgroundColor: '#d4edda',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    padding: 8,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  likedButton: {
-    backgroundColor: '#ffe6e6',
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  colorButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#007AFF',
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  colorButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  badgesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-});
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//     backgroundColor: '#f8fafc',
+//   },
+//   activeFilters: {
+//     paddingHorizontal: 16,
+//     paddingVertical: 8,
+//     backgroundColor: '#f8fafc',
+//   },
+//   activeFiltersText: {
+//     fontSize: 12,
+//     color: '#64748b',
+//   },
+//   remixButton: {
+//     paddingHorizontal: 12,
+//     paddingVertical: 6,
+//     backgroundColor: '#7C3AED',
+//     borderRadius: 16,
+//   },
+//   remixButtonText: {
+//     color: 'white',
+//     fontSize: 12,
+//     fontWeight: '600',
+//   },
+//   modalOverlay: {
+//     flex: 1,
+//     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+//     justifyContent: 'flex-end',
+//   },
+//   modalContent: {
+//     backgroundColor: 'white',
+//     borderTopLeftRadius: 20,
+//     borderTopRightRadius: 20,
+//     maxHeight: '80%',
+//   },
+//   modalHeader: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     padding: 20,
+//     borderBottomWidth: 1,
+//     borderBottomColor: '#e2e8f0',
+//   },
+//   modalTitle: {
+//     fontSize: 18,
+//     fontWeight: '600',
+//     color: '#1e293b',
+//   },
+//   closeButton: {
+//     fontSize: 24,
+//     color: '#64748b',
+//   },
+//   filterSection: {
+//     padding: 20,
+//   },
+//   filterTitle: {
+//     fontSize: 16,
+//     fontWeight: '600',
+//     color: '#1e293b',
+//     marginBottom: 12,
+//   },
+//   filterActions: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     marginBottom: 16,
+//   },
+//   filterAction: {
+//     fontSize: 14,
+//     color: '#7C3AED',
+//     textDecorationLine: 'underline',
+//   },
+//   mediaTypeGrid: {
+//     flexDirection: 'row',
+//     flexWrap: 'wrap',
+//     gap: 8,
+//     marginBottom: 24,
+//   },
+//   mediaTypeFilter: {
+//     paddingHorizontal: 12,
+//     paddingVertical: 8,
+//     backgroundColor: '#f1f5f9',
+//     borderRadius: 8,
+//     alignItems: 'center',
+//   },
+//   mediaTypeFilterSelected: {
+//     backgroundColor: '#7C3AED',
+//   },
+//   mediaTypeFilterText: {
+//     fontSize: 12,
+//     color: '#475569',
+//     fontWeight: '500',
+//   },
+//   mediaTypeFilterTextSelected: {
+//     color: 'white',
+//   },
+//   mediaTypeCount: {
+//     fontSize: 10,
+//     color: '#94a3b8',
+//     marginTop: 2,
+//   },
+//   sortOptions: {
+//     flexDirection: 'row',
+//     gap: 8,
+//   },
+//   sortOption: {
+//     flex: 1,
+//     padding: 12,
+//     backgroundColor: '#f1f5f9',
+//     borderRadius: 8,
+//     alignItems: 'center',
+//   },
+//   sortOptionSelected: {
+//     backgroundColor: '#7C3AED',
+//   },
+//   sortOptionText: {
+//     fontSize: 14,
+//     color: '#475569',
+//     fontWeight: '500',
+//   },
+//   sortOptionTextSelected: {
+//     color: 'white',
+//   },
+//   applyButton: {
+//     backgroundColor: '#7C3AED',
+//     margin: 20,
+//     padding: 16,
+//     borderRadius: 12,
+//     alignItems: 'center',
+//   },
+//   applyButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//     fontWeight: '600',
+//   },
+//   uploadFab: {
+//     position: 'absolute',
+//     bottom: 20,
+//     right: 20,
+//     width: 56,
+//     height: 56,
+//     borderRadius: 28,
+//     backgroundColor: '#7C3AED',
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.3,
+//     shadowRadius: 4,
+//     elevation: 5,
+//   },
+//   uploadFabText: {
+//     fontSize: 24,
+//     color: 'white',
+//     fontWeight: 'bold',
+//   },
+//   loadingContainer: {
+//     flex: 1,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     backgroundColor: '#f5f5f5',
+//   },
+//   loadingText: {
+//     marginTop: 12,
+//     fontSize: 16,
+//     color: '#666',
+//   },
+//   emptyContainer: {
+//     flex: 1,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     padding: 40,
+//   },
+//   emptyText: {
+//     fontSize: 18,
+//     color: '#666',
+//     marginBottom: 8,
+//   },
+//   emptySubtext: {
+//     fontSize: 14,
+//     color: '#999',
+//     textAlign: 'center',
+//   },
+//   gallery: {
+//     padding: 8,
+//   },
+//   workCard: {
+//     flex: 1,
+//     margin: 8,
+//     backgroundColor: 'white',
+//     borderRadius: 12,
+//     padding: 12,
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 3,
+//   },
+//   workImage: {
+//     width: '100%',
+//     height: 350,
+//     borderRadius: 8,
+//     backgroundColor: '#f8f8f8',
+//   },
+//   workInfo: {
+//     marginTop: 8,
+//   },
+//   title: {
+//     fontSize: 16,
+//     fontWeight: 'bold',
+//   },
+//   artist: {
+//     fontSize: 14,
+//     color: '#007AFF',
+//     marginTop: 4,
+//     textDecorationLine: 'underline',
+//   },
+//   description: {
+//     fontSize: 12,
+//     color: '#888',
+//     marginTop: 4,
+//     lineHeight: 16,
+//   },
+//   workMeta: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     marginTop: 8,
+//   },
+//   mediaType: {
+//     fontSize: 12,
+//     color: '#666',
+//     backgroundColor: '#f0f0f0',
+//     paddingHorizontal: 6,
+//     paddingVertical: 2,
+//     borderRadius: 8,
+//   },
+//   colorableBadge: {
+//     fontSize: 12,
+//     color: '#155724',
+//     backgroundColor: '#d4edda',
+//     paddingHorizontal: 6,
+//     paddingVertical: 2,
+//     borderRadius: 8,
+//   },
+//   actionsRow: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     marginTop: 8,
+//     gap: 8,
+//   },
+//   actionButton: {
+//     flex: 1,
+//     padding: 8,
+//     backgroundColor: '#f8f9fa',
+//     borderRadius: 20,
+//     alignItems: 'center',
+//   },
+//   likedButton: {
+//     backgroundColor: '#ffe6e6',
+//   },
+//   actionText: {
+//     fontSize: 12,
+//     fontWeight: '600',
+//   },
+//   colorButton: {
+//     paddingHorizontal: 12,
+//     paddingVertical: 8,
+//     backgroundColor: '#007AFF',
+//     borderRadius: 20,
+//     alignItems: 'center',
+//   },
+//   colorButtonText: {
+//     color: 'white',
+//     fontSize: 12,
+//     fontWeight: '600',
+//   },
+//   badgesContainer: {
+//     flexDirection: 'row',
+//     flexWrap: 'wrap',
+//     gap: 6,
+//     marginTop: 8,
+//     marginBottom: 8,
+//   },
+// });
 
 export default GalleryScreen;
