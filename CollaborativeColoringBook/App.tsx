@@ -1,22 +1,25 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import GalleryScreen from './screens/GalleryScreen';
 import { LogBox } from 'react-native';
-import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
-import { RootStackParamList } from './types/navigation';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import ErrorBoundary from './components/ErrorBoundary';
+
+import { ThemeProvider } from './context/ThemeContext';
+import { FloatingThemeButton } from './components/DevTools/FloatingThemeButton';
+
+import GalleryScreen from './screens/GalleryScreen';
+import ArtworkDetailScreen from './screens/ArtworkDetailScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import CreateRemixScreen from './screens/CreateRemixScreen';
 import UploadScreen from './screens/UploadScreen';
 import AuthScreen from './screens/AuthScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import ThemePreviewScreen from './screens/ThemePreviewScreen';
+
 import HeaderRight from './components/HeaderRight';
 import GalleryHeaderRight from './components/GalleryHeaderRight';
-import ErrorBoundary from './components/ErrorBoundary';
-import { ThemeProvider } from './context/ThemeContext';
-import ThemePreviewScreen from './screens/ThemePreviewScreen';
-import { FloatingThemeButton } from './components/DevTools/FloatingThemeButton';
 
+import { RootStackParamList } from './types/navigation';
 
 LogBox.ignoreAllLogs(false);
 
@@ -27,8 +30,6 @@ function Navigation() {
   const { user, loading } = useAuth();
 
   return (
-    <ThemeProvider>
-    <NavigationContainer>
       <Stack.Navigator>
         {/* Gallery is always accessible to everyone */}
         <Stack.Screen 
@@ -48,6 +49,18 @@ function Navigation() {
           headerRight: () => <HeaderRight /> 
         }}
         />
+
+        {/* DEVELOPMENT SCREENS - Always accessible in dev */}
+      {__DEV__ && (
+        <Stack.Screen 
+          name="ThemePreview" 
+          component={ThemePreviewScreen}
+          options={{ 
+            title: '🎨 Theme Reference',
+            headerShown: true,
+          }}
+        />
+      )}
 
         {user ? (
           // User is signed in - show protected screens
@@ -83,14 +96,6 @@ function Navigation() {
               headerRight: () => <HeaderRight />
              }}
             />
-            <Stack.Screen 
-  name="ThemePreview" 
-  component={ThemePreviewScreen}
-  options={{ 
-    title: 'Theme Reference',
-    headerShown: true,
-  }}
-/>
           </>
         ) : (
           // User is not signed in - show auth screen
@@ -101,19 +106,20 @@ function Navigation() {
           />
         )}
       </Stack.Navigator>
-    </NavigationContainer>
-    </ThemeProvider>
   );
 }
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <NavigationContainer>
-      <FloatingThemeButton />
-      </NavigationContainer>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <NavigationContainer>
+            <Navigation />
+          {__DEV__ && <FloatingThemeButton />}
+          </NavigationContainer>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
