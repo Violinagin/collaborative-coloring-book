@@ -14,6 +14,8 @@ import HeaderRight from './components/HeaderRight';
 import GalleryHeaderRight from './components/GalleryHeaderRight';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ThemeProvider } from './context/ThemeContext';
+import ThemePreviewScreen from './screens/ThemePreviewScreen';
+import { FloatingThemeButton } from './components/DevTools/FloatingThemeButton';
 
 
 LogBox.ignoreAllLogs(false);
@@ -81,6 +83,14 @@ function Navigation() {
               headerRight: () => <HeaderRight />
              }}
             />
+            <Stack.Screen 
+  name="ThemePreview" 
+  component={ThemePreviewScreen}
+  options={{ 
+    title: 'Theme Reference',
+    headerShown: true,
+  }}
+/>
           </>
         ) : (
           // User is not signed in - show auth screen
@@ -100,7 +110,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Navigation />
+        <NavigationContainer>
+      <FloatingThemeButton />
+      </NavigationContainer>
       </AuthProvider>
     </ErrorBoundary>
   );

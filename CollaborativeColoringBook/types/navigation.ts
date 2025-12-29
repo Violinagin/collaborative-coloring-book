@@ -1,4 +1,4 @@
-import { CreativeWork, User  } from './core'; 
+import { CreativeWork } from './core'; 
 
 export type RootStackParamList = {
   Gallery: { 
@@ -21,6 +21,7 @@ export type RootStackParamList = {
     originalWorkId: string;
     originalWorkTitle?: string;
   };
+  ThemePreview: undefined;
   Debug: undefined;
   Auth: undefined;
   EditProfile: undefined;
