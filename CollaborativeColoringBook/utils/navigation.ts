@@ -1,33 +1,151 @@
 // utils/navigation.ts
 import { CreativeWork } from '../types/core';
+import { RootStackParamList } from '../types/navigation';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-// ============ PROFILE NAVIGATION ============
-export const navigateToProfile = (
-    navigation: any,
-    userId: string,
+type AppNavigation = NativeStackNavigationProp<RootStackParamList>;
+
+export const handleArtistPressNav =(
+    navigation: AppNavigation,
+    artistId: string,
     currentUserId?: string
   ) => {
-    console.log(`🚶 navigateToProfile: ${userId} (current: ${currentUserId})`);
+    console.log(`🎨 WorkCard: Artist ${artistId}, Current user: ${currentUserId}`);
     
-    // If it's the current user OR no userId provided
-    if (!userId || userId === currentUserId) {
-      // Go to current user's profile in ProfileTab
-      navigation.navigate('ProfileTab', {
-        screen: 'Profile',
-        params: { userId: undefined } // Explicitly undefined
-      });
+    if (artistId === currentUserId) {
+      // Tapping on your own work - go to your profile tab
+      navigateToCurrentUserProfile(navigation, currentUserId);
     } else {
-      // Go to other user's profile in ArtistProfile
-      navigation.navigate('ArtistProfile', { 
-        userId,
-        _timestamp: Date.now()
-      });
+      // Tapping on another artist's work - view their profile
+      navigateToProfile(navigation, artistId, currentUserId);
     }
   };
 
+// ============ PROFILE NAVIGATION ============
+
+export const navigateToProfile = (
+    navigation: AppNavigation,
+    targetUserId: string,
+    currentUserId?: string
+  ) => {
+    console.log(`🚶 navigateToProfile: ${targetUserId} (current: ${currentUserId})`);
+    
+    const isOwnProfile = currentUserId && targetUserId === currentUserId;
+    
+    // ALWAYS navigate to Profile screen with parameters
+    navigation.navigate('Profile', {
+      userId: targetUserId,
+      isOtherUserProfile: !isOwnProfile
+    });
+  };
+  
+  export const navigateToCurrentUserProfile = (
+    navigation: AppNavigation,
+    currentUserId?: string
+  ) => {
+    console.log('👤 navigateToCurrentUserProfile');
+    
+    if (!currentUserId) {
+      // Not logged in - go to auth
+      navigation.navigate('Auth', {
+        message: 'Sign in to view your profile',
+        redirectTo: 'Profile'
+      });
+      return;
+    }
+    
+    // Logged in - navigate to Profile with current user's ID
+    navigation.navigate('Profile', {
+      userId: currentUserId,
+      isOtherUserProfile: false
+    });
+  };
+
+// export const navigateToProfile = (
+//     navigation: AppNavigation,
+//     targetUserId: string,
+//     currentUserId?: string
+//   ) => {
+//     console.log(`🚶 navigateToProfile: ${targetUserId} (current: ${currentUserId})`);
+    
+//     const isOwnProfile = currentUserId && targetUserId === currentUserId;
+    
+//     // Get current navigation state
+//     const state = navigation.getState();
+//     const currentRoute = state.routes[state.index];
+//     const isInMainTabs = currentRoute.name === 'MainTabs';
+    
+//     if (isOwnProfile) {
+//       // Viewing own profile
+//       if (isInMainTabs) {
+//         // Already in tabs, just switch to ProfileTab
+//         navigation.navigate('Profile', {
+//             userId: targetUserId,
+//             isOtherUserProfile: !isOwnProfile
+//           });
+//       } else {
+//         // In public mode, navigate to profile with auth prompt if needed
+//         if (currentUserId) {
+//           navigation.navigate('Profile', { 
+//             userId: targetUserId,
+//             isOtherUserProfile: false 
+//           });
+//         } else {
+//           // Not logged in - go to auth first
+//           navigation.navigate('Auth', {
+//             message: 'Sign in to view your profile',
+//             redirectTo: 'Profile',
+//             redirectParams: { userId: undefined } // Will use current user after login
+//           });
+//         }
+//       }
+//     } else {
+//       // Viewing another user's profile
+//       if (isInMainTabs) {
+//         // In tab mode, navigate within GalleryTab
+//         navigation.navigate('GalleryTab', {
+//           screen: 'Profile',
+//           params: { 
+//             userId: targetUserId,
+//             isOtherUserProfile: true 
+//           }
+//         });
+//       } else {
+//         // In public mode, direct navigation
+//         navigation.navigate('Profile', { 
+//           userId: targetUserId,
+//           isOtherUserProfile: true 
+//         });
+//       }
+//     }
+//   };
+
+// export const navigateToProfile = (
+//     navigation: NativeStackNavigationProp<RootStackParamList>,
+//     userId: string,
+//     currentUserId?: string
+//   ) => {
+//     console.log(`🚶 navigateToProfile: ${userId} (current: ${currentUserId})`);
+    
+//     // If it's the current user OR no userId provided
+//     if (!userId || userId === currentUserId) {
+//       // Go to current user's profile in ProfileTab
+//       navigation.navigate('ProfileTab', {
+//         screen: 'Profile',
+//         params: { userId: undefined } // Explicitly undefined
+//       });
+//     } else {
+//       // Go to other user's profile in ArtistProfile
+//       navigation.navigate('ArtistProfile', { 
+//         userId,
+//         _timestamp: Date.now()
+//       });
+//     }
+//   };
+
 // ============ UPLOAD NAVIGATION ============
 export const navigateToUpload = (
-    navigation: any, 
+    navigation: AppNavigation,
     user: any,
     params?: {
       originalWorkId?: string;
@@ -41,26 +159,16 @@ export const navigateToUpload = (
         message: 'Sign in to upload artwork',
         redirectTo: 'Upload',
         redirectParams: params
-    } as any);
+      });
       return;
     }
     
-    // Logged in - navigate appropriately based on current mode
-    if (navigation.canGoBack()) {
-      // We're in tab mode
-      navigation.navigate('UploadTab', {
-        screen: 'Upload',
-        params: params
-      });
-    } else {
-      // We're in public mode (shouldn't happen if user is logged in)
-      navigation.navigate('Upload', params);
-    }
+    // Logged in - navigate to Upload
+    navigation.navigate('Upload', params);
   };
-
 // ============ ARTWORK DETAIL NAVIGATION ============
 export const navigateToArtworkDetail = (
-    navigation: any,
+    navigation: AppNavigation,
     workId: string,
     options?: {
       openComments?: boolean;
@@ -102,7 +210,7 @@ export const navigateToCreateRemix = (
 
 // ============ GALLERY NAVIGATION ============
 export const navigateToGallery = (
-    navigation: any,
+    navigation: AppNavigation,
     options?: {
       showFilterModal?: boolean;
       scrollToTop?: boolean;
@@ -110,11 +218,8 @@ export const navigateToGallery = (
   ) => {
     console.log('🖼️ Navigating to gallery');
     
-    // Navigate to GalleryTab, then Gallery screen
-    navigation.navigate('GalleryTab', {
-      screen: 'Gallery',
-      params: options
-    });
+    // Navigate to Gallery screen directly
+    navigation.navigate('Gallery', options as any);
   };
 
 // ============ TAB SWITCHING HELPERS ============
@@ -129,7 +234,7 @@ export const switchToTab = (
 };
 
 // ============ NAVIGATE TO AUTH ============
-export const navigateToAuth = (navigation: any) => {
+export const navigateToAuth = (navigation: AppNavigation) => {
     console.log('🔐 Navigating to auth');
     navigation.navigate('Auth');
   };
@@ -169,7 +274,7 @@ export const debugNavigation = (navigation: any) => {
 /**
  * Check if we're in tab mode
  */
-export const isInTabMode = (navigation: any): boolean => {
+export const isInTabMode = (navigation: AppNavigation): boolean => {
     const state = navigation.getState();
     return state.routes[state.index]?.name === 'MainTabs';
   };
@@ -177,7 +282,7 @@ export const isInTabMode = (navigation: any): boolean => {
   /**
    * Switch to tab mode (after login)
    */
-  export const switchToTabMode = (navigation: any) => {
+  export const switchToTabMode = (navigation: AppNavigation) => {
     navigation.reset({
       index: 0,
       routes: [{ name: 'MainTabs' }],
@@ -188,11 +293,11 @@ export const isInTabMode = (navigation: any): boolean => {
    * Handle post-login navigation
    */
   export const handlePostLogin = (
-    navigation: any,
-    redirectTo?: string,
+    navigation: AppNavigation,
+    redirectTo?: keyof RootStackParamList,
     redirectParams?: any
   ) => {
-    if (redirectTo) {
+    if (redirectTo && redirectTo !== 'MainTabs') {
       // Navigate to the requested screen in tab mode
       switchToTabMode(navigation);
       
@@ -201,7 +306,7 @@ export const isInTabMode = (navigation: any): boolean => {
         navigation.navigate(redirectTo, redirectParams);
       }, 100);
     } else {
-      // No redirect, just go to tabs
+      // No redirect or redirect to MainTabs, just go to tabs
       switchToTabMode(navigation);
     }
   };
@@ -209,7 +314,7 @@ export const isInTabMode = (navigation: any): boolean => {
   // ============ LOGOUT ============
   
   export const performLogout = async (
-    navigation: any,
+    navigation: AppNavigation,
     signOutFunction: () => Promise<void>
   ) => {
     try {

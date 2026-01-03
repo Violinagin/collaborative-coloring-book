@@ -93,7 +93,7 @@ const CustomStackHeader = (props: any) => {
 // Gallery Stack 
 function GalleryStack() {
     return (
-        <RootStack.Navigator
+      <RootStack.Navigator
         screenOptions={{
           header: (props) => <CustomStackHeader {...props} />,
         }}
@@ -101,10 +101,43 @@ function GalleryStack() {
         <RootStack.Screen name="Gallery" component={GalleryScreen} />
         <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
         <RootStack.Screen name="CreateRemix" component={CreateRemixScreen} />
-        <RootStack.Screen name="ArtistProfile" component={ProfileScreen} />
+        {/* Viewing OTHER users' profiles */}
+        <RootStack.Screen 
+          name="Profile" 
+          component={ProfileScreen}
+          initialParams={{ isOtherUserProfile: true }}
+          options={{ title: 'Artist Profile' }}
+        />
       </RootStack.Navigator>
     );
   }
+
+  // Current User's Profile Stack - Only for the logged-in user
+function CurrentUserProfileStack() {
+    const { user } = useAuth();
+    
+    return (
+      <RootStack.Navigator
+        screenOptions={{
+          header: (props) => <CustomStackHeader {...props} />,
+        }}
+      >
+        {/* Current user's profile - always shows their own */}
+        <RootStack.Screen 
+          name="Profile" 
+          component={ProfileScreen}
+          initialParams={{ 
+            userId: user?.id,  // Always their own ID
+            isOtherUserProfile: false 
+          }}
+          options={{ title: 'My Profile' }}
+        />
+        <RootStack.Screen name="EditProfile" component={EditProfileScreen} />
+        <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
+      </RootStack.Navigator>
+    );
+  }
+  
   
   function UploadStack() {
     return (
@@ -117,24 +150,53 @@ function GalleryStack() {
       </RootStack.Navigator>
     );
   }
-  
-  function ProfileStack() {
+
+// Public Stack - For logged-out users
+function PublicStack() {
     return (
       <RootStack.Navigator
         screenOptions={{
           header: (props) => <CustomStackHeader {...props} />,
         }}
       >
+        <RootStack.Screen name="Gallery" component={GalleryScreen} />
+        <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
+        {/* Public profiles - can view anyone */}
         <RootStack.Screen 
           name="Profile" 
           component={ProfileScreen}
-          initialParams={{ userId: undefined }}
+          initialParams={{ isOtherUserProfile: true }}
+          options={{ title: 'Artist Profile' }}
         />
-        <RootStack.Screen name="EditProfile" component={EditProfileScreen} />
-        <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
+        <RootStack.Screen 
+          name="Auth" 
+          component={AuthScreen}
+          initialParams={{ message: 'Welcome! Sign in to get started.' }}
+        />
+        {__DEV__ && (
+          <RootStack.Screen name="ThemePreview" component={ThemePreviewScreen} />
+        )}
       </RootStack.Navigator>
     );
-  }
+  }  
+  
+//   function ProfileStack() {
+//     return (
+//       <RootStack.Navigator
+//         screenOptions={{
+//           header: (props) => <CustomStackHeader {...props} />,
+//         }}
+//       >
+//         <RootStack.Screen 
+//           name="Profile" 
+//           component={ProfileScreen}
+//           initialParams={{ userId: undefined }}
+//         />
+//         <RootStack.Screen name="EditProfile" component={EditProfileScreen} />
+//         <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
+//       </RootStack.Navigator>
+//     );
+//   }
 
 // ============ MAIN TAB NAVIGATOR ============
 
@@ -185,42 +247,42 @@ function MainTabNavigator() {
       />
       <MainTab.Screen 
         name="ProfileTab" 
-        component={ProfileStack}
+        component={CurrentUserProfileStack}
         options={{ title: 'Profile' }}
       />
     </MainTab.Navigator>
   );
 }
 
-// ============ PUBLIC ONLY NAVIGATOR (NEW) ============
+// // ============ PUBLIC ONLY NAVIGATOR (NEW) ============
 
-function PublicOnlyNavigator() {
-    return (
-        <RootStack.Navigator
-        screenOptions={{
-          header: (props) => <CustomStackHeader {...props} />,
-        }}
-      >
-        {/* Public screens only - no tabs */}
-        <RootStack.Screen name="Gallery" component={GalleryScreen} />
-        <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
-        <RootStack.Screen 
-        name="Auth" 
-        component={AuthScreen}
-        // Pass initialParams if needed
-        initialParams={{ message: 'Welcome! Sign in to get started.' }}
-      />
-        <RootStack.Screen 
-        name="ArtistProfile" 
-        component={ProfileScreen}
-      />
-        {/* Development */}
-        {__DEV__ && (
-          <RootStack.Screen name="ThemePreview" component={ThemePreviewScreen} />
-        )}
-      </RootStack.Navigator>
-    );
-  }
+// function PublicOnlyNavigator() {
+//     return (
+//         <RootStack.Navigator
+//         screenOptions={{
+//           header: (props) => <CustomStackHeader {...props} />,
+//         }}
+//       >
+//         {/* Public screens only - no tabs */}
+//         <RootStack.Screen name="Gallery" component={GalleryScreen} />
+//         <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
+//         <RootStack.Screen 
+//         name="Auth" 
+//         component={AuthScreen}
+//         // Pass initialParams if needed
+//         initialParams={{ message: 'Welcome! Sign in to get started.' }}
+//       />
+//         <RootStack.Screen 
+//         name="ArtistProfile" 
+//         component={ProfileScreen}
+//       />
+//         {/* Development */}
+//         {__DEV__ && (
+//           <RootStack.Screen name="ThemePreview" component={ThemePreviewScreen} />
+//         )}
+//       </RootStack.Navigator>
+//     );
+//   }
 
 // ============ ROOT NAVIGATOR (DECIDES WHICH TO SHOW) ============
 
@@ -238,7 +300,7 @@ function RootNavigator() {
           <RootStack.Screen name="MainTabs" component={MainTabNavigator} />
         ) : (
           // User is not logged in - show public-only mode (no tabs)
-          <RootStack.Screen name="Public" component={PublicOnlyNavigator} />
+          <RootStack.Screen name="Public" component={PublicStack} />
         )}
         
         {/* Development screens accessible from both modes */}

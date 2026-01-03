@@ -8,16 +8,17 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types/navigation';
 import { useTheme } from '../../context/ThemeContext';
 import { ThemedText } from '../shared/ThemedText';
 import { Icons } from '../shared/Icon';
 import { HeartButton } from '../shared/HeartButton';
 import { MediaTypeBadge } from '../MediaTypeBadge';
 import { WorkTypeBadge } from '../WorkTypeBadge';
-import { navigateToProfile } from '../../utils/navigation';
+import { navigateToProfile, handleArtistPressNav } from '../../utils/navigation';
 
 import { useAuth } from '../../context/AuthContext';
-import { isTemplateExpression } from 'typescript';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -83,7 +84,7 @@ export const WorkCard: React.FC<WorkCardProps> = ({
   onArtistPress,
 }) => {
   const theme = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
   
   const isRemix = !!work.originalWorkId;
@@ -115,22 +116,7 @@ export const WorkCard: React.FC<WorkCardProps> = ({
 
   // Artist press handler
   const handleArtistPress = (artistId: string) => {
-    console.log('🎨 WorkCard: Navigating to profile for:', artistId);
-    
-    // Check if this is the current user
-    if (user && artistId === user.id) {
-      // It's you! Go to Profile tab
-      navigation.navigate('ProfileTab', {
-        screen: 'Profile',
-        params: { userId: undefined }
-      });
-    } else {
-      // It's another user, go to ArtistProfile
-      navigation.navigate('ArtistProfile', { 
-        userId: artistId,
-        _timestamp: Date.now()
-      });
-    }
+    handleArtistPressNav(navigation, artistId, user?.id);
   };
 
   const handleCardPress = () => {

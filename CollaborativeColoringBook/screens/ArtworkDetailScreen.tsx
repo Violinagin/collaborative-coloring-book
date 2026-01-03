@@ -76,7 +76,7 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
       navigateToProfile(navigation, artistId, currentUser?.id)
     } else {
       // It's another user, go to ArtistProfile
-      navigation.navigate('ArtistProfile', { 
+      navigation.navigate('Profile', { 
         userId: artistId
       });
     }

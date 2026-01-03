@@ -17,7 +17,7 @@ export type RootStackParamList = {
   Public: undefined;
   
   // Main tabs (shown when logged in)
-  MainTabs: undefined;
+  MainTabs: { screen?: 'GalleryTab' | 'UploadTab' | 'ProfileTab' } | undefined;
   
   // Public screens (can be accessed directly)
   Gallery: { 
@@ -29,10 +29,8 @@ export type RootStackParamList = {
     commentModal?: boolean;
     autoLike?: boolean;
   };
-  Profile: { userId?: string };
-  ArtistProfile: { 
-    userId: string;
-    _timestamp?: number; // Optional for forcing reload
+  Profile: { userId?: string;
+    isOtherUserProfile?: boolean;
   };
   UserProfile: { userId: string };
   
@@ -71,7 +69,6 @@ export type UploadScreenProps = NativeStackScreenProps<RootStackParamList, 'Uplo
 export type ProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 export type EditProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 export type ThemePreviewScreenProps = NativeStackScreenProps<RootStackParamList, 'ThemePreview'>;
-export type ArtistProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'ArtistProfile'>;
 
 // Tab screen props (if needed for tab listeners)
 export type GalleryTabProps = BottomTabScreenProps<TabParamList, 'GalleryTab'>;
