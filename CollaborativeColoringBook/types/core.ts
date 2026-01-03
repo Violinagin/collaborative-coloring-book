@@ -103,6 +103,7 @@ export type CreativeWork = {
   comments?: Comment[];
   userHasLiked?: boolean;
   artist?: User;
+  aspectRatio?: number;
 }
 
 export type UploadWork = {

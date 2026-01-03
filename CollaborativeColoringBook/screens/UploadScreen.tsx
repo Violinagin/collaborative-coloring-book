@@ -19,9 +19,11 @@ import { useAuth } from '../context/AuthContext';
 import { AlertModal } from '../components/AlertModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { mediaUtils } from '../utils/mediaUtils';
+import { UploadScreenProps } from '../types/navigation';
+import { navigateToProfile, navigateToAuth, navigateToUpload, navigateToArtworkDetail } from '../utils/navigation';
 
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Upload'>;
+type Props = UploadScreenProps;
 
 const UploadScreen = ({ navigation, route }: Props) => {
   const { user } = useAuth();
@@ -241,7 +243,7 @@ const UploadScreen = ({ navigation, route }: Props) => {
     
     if (createdWorkId) {
       // Navigate to the newly created artwork
-      navigation.navigate('ArtworkDetail', { workId: createdWorkId });
+      navigateToArtworkDetail;
       
       // Optional: Clear the form for next upload
       setTitle('');

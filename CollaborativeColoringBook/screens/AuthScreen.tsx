@@ -11,19 +11,43 @@ import {
   ScrollView,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types/navigation';
+import { RootStackParamList, AuthParams } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
 import { AlertModal } from '../components/AlertModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
-const AuthScreen = ({ navigation }: Props) => {
+const AuthScreen = ({ navigation, route }: Props) => {
+  const authParams = route.params as AuthParams | undefined;
+  const { redirectTo, redirectParams, message } = authParams || {};
   const { signIn, signUp, loading } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
+
+  const handleLoginSuccess = (user: any) => {
+    // After successful login, handle redirect
+    if (redirectTo) {
+      // Navigate to the requested screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }], // Switch to tab mode
+      });
+      
+      // Then navigate to the requested screen
+      setTimeout(() => {
+        navigation.navigate(redirectTo, redirectParams);
+      }, 100);
+    } else {
+      // No redirect, just go to tabs
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    }
+  };
 
    // Alert Modal State
    const [alertVisible, setAlertVisible] = useState(false);

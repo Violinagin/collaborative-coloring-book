@@ -1,332 +1,380 @@
-// components/shared/WorkCard/WorkCard.tsx
-import React, { useMemo } from 'react';
+// components/WorkCard/WorkCard.tsx - UPDATED WITH ASPECT RATIOS
+import React from 'react';
 import {
   View,
-  Text,
   Image,
   TouchableOpacity,
-  Dimensions,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
-import { useTheme } from '../../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../types/navigation';
-import { CreativeWork } from '../../../types/core';
-import { MediaTypeBadge } from '../../MediaTypeBadge';
-import { WorkTypeBadge } from '../../WorkTypeBadge';
-import { HeartButton } from '../../HeartButton';
+import { useTheme } from '../../context/ThemeContext';
+import { ThemedText } from '../shared/ThemedText';
+import { Icons } from '../shared/Icon';
+import { HeartButton } from '../shared/HeartButton';
+import { MediaTypeBadge } from '../MediaTypeBadge';
+import { WorkTypeBadge } from '../WorkTypeBadge';
+import { navigateToProfile } from '../../utils/navigation';
+
+import { useAuth } from '../../context/AuthContext';
+import { isTemplateExpression } from 'typescript';
+
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 
 interface WorkCardProps {
-  work: CreativeWork;
-  likeInfo?: {
+  work: {
+    id: string;
+    title: string;
+    assetUrl: string;
+    artistId: string;
+    artist: {
+      displayName: string;
+      username?: string;
+    };
+    mediaType: string;
+    originalWorkId?: string;
+    description?: string;
+    aspectRatio?: number; // Optional for now
+  };
+  likeInfo: {
     count: number;
     isLiked: boolean;
   };
-  commentCount?: number;
+  commentCount: number;
   remixCount?: number;
-  onLikePress?: (workId: string) => void;
-  onCommentPress?: (workId: string) => void;
-  onRemixPress?: (workId: string, workTitle: string) => void;
-  variant?: 'default' | 'compact' | 'featured';
-  showArtist?: boolean;
-  showActions?: boolean;
+  onLikePress: () => void;
+  onArtistPress?: (artistId: string) => void;
 }
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+// Aspect ratio defaults by media type
+const MEDIA_TYPE_ASPECT_RATIOS: Record<string, number> = {
+  // Images
+  line_art: 1,        // Square (1:1)
+  colored_art: 1,     // Square (1:1)
+  digital_art: 1.5,   // Widescreen (3:2)
+  comic: 1.333,       // Standard comic (4:3)
+  photo: 1.5,         // Standard photo (3:2)
+  
+  // Video/Animation
+  animation: 1.777,   // 16:9 video
+  video: 1.777,       // 16:9
+  
+  // Writing
+  writing: 1.414,     // A4 paper (√2:1)
+  
+  // Music
+  music: 1,           // Square album cover
+  
+  // 3D
+  three_d: 1,         // Square preview
+  
+  // Default fallback
+  default: 1,
+};
 
 export const WorkCard: React.FC<WorkCardProps> = ({
   work,
-  likeInfo = { count: 0, isLiked: false },
-  commentCount = 0,
+  likeInfo,
+  commentCount,
   remixCount = 0,
   onLikePress,
-  onCommentPress,
-  onRemixPress,
-  variant = 'default',
-  showArtist = true,
-  showActions = true,
+  onArtistPress,
 }) => {
   const theme = useTheme();
-  const navigation = useNavigation<NavigationProp>();
-  const { width } = Dimensions.get('window');
+  const navigation = useNavigation();
+  const { user } = useAuth();
   
   const isRemix = !!work.originalWorkId;
   const artistDisplayName = work.artist?.displayName || 'Unknown Artist';
-  
-  // Calculate dynamic image height based on aspect ratio
-  const imageHeight = useMemo(() => {
-    const targetHeight = width * 0.8; // 80% of screen width
-    const maxHeight = Dimensions.get('window').height * 0.7;
-    
-    if (work.aspectRatio) {
-      const calculatedHeight = width / work.aspectRatio;
-      return Math.min(calculatedHeight, maxHeight);
-    }
-    
-    return Math.min(targetHeight, maxHeight);
-  }, [width, work.aspectRatio]);
 
-  const styles = useMemo(() => createStyles(theme, variant, imageHeight), 
-    [theme, variant, imageHeight]);
+  // Calculate image height based on media type aspect ratio
+  const calculateImageHeight = () => {
+    const CARD_WIDTH = SCREEN_WIDTH - 24; // Account for margins (12 + 12)
+    
+    // Use provided aspect ratio, or default based on media type
+    const aspectRatio = work.aspectRatio || 
+                       MEDIA_TYPE_ASPECT_RATIOS[work.mediaType] || 
+                       MEDIA_TYPE_ASPECT_RATIOS.default;
+    
+    // Calculate initial height
+    let height = CARD_WIDTH / aspectRatio;
+    
+    // Apply reasonable constraints
+    const MIN_HEIGHT = 200;
+    const MAX_HEIGHT = SCREEN_WIDTH * 1.5; // Max 1.5x screen width
+    
+    // Clamp between min and max
+    height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height));
+    
+    return { height, aspectRatio };
+  };
+
+  const { height: imageHeight, aspectRatio } = calculateImageHeight();
+
+  // Artist press handler
+  const handleArtistPress = (artistId: string) => {
+    console.log('🎨 WorkCard: Navigating to profile for:', artistId);
+    
+    // Check if this is the current user
+    if (user && artistId === user.id) {
+      // It's you! Go to Profile tab
+      navigation.navigate('ProfileTab', {
+        screen: 'Profile',
+        params: { userId: undefined }
+      });
+    } else {
+      // It's another user, go to ArtistProfile
+      navigation.navigate('ArtistProfile', { 
+        userId: artistId,
+        _timestamp: Date.now()
+      });
+    }
+  };
 
   const handleCardPress = () => {
     navigation.navigate('ArtworkDetail', { workId: work.id });
   };
 
-  const handleArtistPress = () => {
-    navigation.navigate('Profile', { userId: work.artistId });
+  const handleCommentPress = () => {
+    navigation.navigate('ArtworkDetail', { 
+      workId: work.id,
+    });
   };
 
-  const handleLikePressInternal = () => {
-    if (onLikePress) {
-      onLikePress(work.id);
-    }
+  const handleRemixPress = () => {
+    navigation.navigate('CreateRemix', {
+      originalWorkId: work.id,
+      originalWorkTitle: work.title,
+    });
   };
 
-  const handleCommentPressInternal = () => {
-    if (onCommentPress) {
-      onCommentPress(work.id);
-    } else {
-      navigation.navigate('ArtworkDetail', { workId: work.id });
-    }
-  };
-
-  const handleRemixPressInternal = () => {
-    if (onRemixPress) {
-      onRemixPress(work.id, work.title);
-    } else {
-      navigation.navigate('CreateRemix', {
-        originalWorkId: work.id,
-        originalWorkTitle: work.title,
-      });
-    }
-  };
-
-  const renderMediaPreview = () => {
-    // For now, handle images. We'll expand for other media types later.
-    if (work.assetUrl) {
-      return (
-        <Image
-          source={{ uri: work.assetUrl }}
-          style={styles.mediaImage}
-          resizeMode="contain"
-        />
-      );
-    }
-    
-    // Placeholder for other media types
-    return (
-      <View style={styles.mediaPlaceholder}>
-        <Text style={styles.mediaIcon}>🎨</Text>
-        <Text style={styles.mediaLabel}>
-          {work.mediaType.replace('_', ' ')}
-        </Text>
-      </View>
-    );
-  };
+  // Determine resize mode based on aspect ratio
+  const resizeMode = aspectRatio >= 1 ? 'cover' : 'contain';
 
   return (
-    <TouchableOpacity
-      style={styles.container}
-      onPress={handleCardPress}
-      activeOpacity={0.95}
-    >
-      {/* Media Preview */}
-      <View style={styles.mediaContainer}>
-        {renderMediaPreview()}
+    <View style={styles.container}>
+      {/* Artwork Image with Overlay Badges */}
+      <TouchableOpacity 
+        onPress={handleCardPress}
+        activeOpacity={0.95}
+        style={styles.imageContainer}
+      >
+        <Image
+          source={{ uri: work.assetUrl }}
+          style={[styles.image, { height: imageHeight }]}
+          resizeMode={resizeMode}
+        />
         
-        {/* Gradient Overlay (for text readability) */}
-        <View style={styles.gradientOverlay} />
+        {/* Dark gradient overlay at bottom for text readability */}
+        <View style={[
+          styles.gradientOverlay,
+          { 
+            // Adjust gradient height based on image height
+            height: Math.min(80, imageHeight * 0.4)
+          }
+        ]} />
         
-        {/* Content Overlay */}
-        <View style={styles.contentOverlay}>
-          {/* Badges in top-right corner */}
-          <View style={styles.badgesContainer}>
-            <MediaTypeBadge 
-              mediaType={work.mediaType}
-              size="small"
-              variant="outline"
-            />
+        {/* Media Type Badge (top-left)
+        <View style={styles.mediaTypeBadge}>
+          <MediaTypeBadge 
+            mediaType={work.mediaType}
+            size="small"
+            variant="outline"
+          />
+        </View> */}
+        
+        {/* Work Type Badge (top-right)
+        {isRemix && (
+          <View style={styles.workTypeBadge}>
             <WorkTypeBadge 
-              isOriginal={!isRemix}
+              isOriginal={false}
               size="small"
-              variant={isRemix ? 'remix' : 'original'}
+              variant="remix"
             />
           </View>
-          
-          {/* Bottom Content Area */}
-          <View style={styles.bottomContent}>
-            {/* Social Actions Row */}
-            {showActions && (
-              <View style={styles.actionsRow}>
-                <HeartButton 
-                  isLiked={likeInfo.isLiked}
-                  onPress={handleLikePressInternal}
-                  count={likeInfo.count}
-                  size="medium"
-                  variant="overlay" // Special variant for overlay
-                />
-                
-                <TouchableOpacity
-                  style={styles.commentButton}
-                  onPress={handleCommentPressInternal}
-                >
-                  <Text style={styles.commentIcon}>💬</Text>
-                  <Text style={styles.commentCount}>{commentCount}</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={styles.remixButton}
-                  onPress={handleRemixPressInternal}
-                >
-                  <Text style={styles.remixIcon}>🔄</Text>
-                  <Text style={styles.remixCount}>{remixCount}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            
-            {/* Title and Artist */}
-            <View style={styles.metadata}>
-              <Text style={styles.title} numberOfLines={1}>
-                {work.title}
-              </Text>
-              
-              {showArtist && (
-                <TouchableOpacity onPress={handleArtistPress}>
-                  <Text style={styles.artist} numberOfLines={1}>
-                    by {artistDisplayName}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+        )} */}
+        
+        {/* Title and Artist Overlay (bottom) */}
+        <View style={styles.imageOverlay}>
+          <ThemedText 
+            type="subtitle" 
+            style={[styles.overlayTitle, { color: 'white' }]}
+            numberOfLines={1}
+          >
+            {work.title}
+          </ThemedText>
+          <TouchableOpacity onPress={() => {
+            if (onArtistPress) {
+                onArtistPress(work.artistId);
+            } else {
+             // Fallback: navigate directly (keep for backward compatibility)
+                navigateToProfile(navigation, work.artistId, user?.id);
+            }
+          }}>
+            <ThemedText 
+              type="caption" 
+              style={[styles.overlayArtist, { 
+                color: theme.palette.brand.secondary[300] // Light purple
+              }]}
+              numberOfLines={1}
+            >
+              by {artistDisplayName}
+            </ThemedText>
+          </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+
+      {/* Social Actions Row */}
+      <View style={styles.actionsRow}>
+        <HeartButton 
+          isLiked={likeInfo.isLiked}
+          onPress={onLikePress}
+          count={likeInfo.count}
+          size="medium"
+        />
+        
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={handleCommentPress}
+        >
+          <Icons.Comment 
+            size={22} 
+            color={theme.colorRoles.social.comment} 
+          />
+          <ThemedText 
+            type="caption" 
+            style={[
+              styles.actionCount,
+              { color: theme.colorRoles.social.comment }
+            ]}
+          >
+            {commentCount}
+          </ThemedText>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={handleRemixPress}
+        >
+          <Icons.Remix 
+            size={22} 
+            color={theme.colorRoles.social.remix} 
+          />
+          <ThemedText 
+            type="caption" 
+            style={[
+              styles.actionCount,
+              { color: theme.colorRoles.social.remix }
+            ]}
+          >
+            {remixCount > 0 ? remixCount : 'Remix'}
+          </ThemedText>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+
+      {/* Description (if available) */}
+      {work.description && (
+        <View style={styles.descriptionContainer}>
+          <ThemedText 
+            type="body" 
+            style={[
+              styles.description,
+              { color: theme.colorRoles.ui.text.secondary }
+            ]}
+            numberOfLines={2}
+          >
+            {work.description}
+          </ThemedText>
+        </View>
+      )}
+    </View>
   );
 };
 
-const createStyles = (
-  theme: any,
-  variant: string,
-  imageHeight: number
-) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    marginVertical: variant === 'compact' ? 2 : 4,
-    backgroundColor: variant === 'featured' 
-      ? theme.colorRoles.ui.card 
-      : 'transparent',
-    borderRadius: variant === 'featured' ? 12 : 0,
+    marginHorizontal: 12,
+    marginVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'white',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  mediaContainer: {
-    width: '100%',
-    height: imageHeight,
-    backgroundColor: theme.palette.neutral[900],
+  imageContainer: {
     position: 'relative',
   },
-  mediaImage: {
+  image: {
     width: '100%',
-    height: '100%',
-  },
-  mediaPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.palette.neutral[800],
-  },
-  mediaIcon: {
-    fontSize: 48,
-    color: theme.palette.neutral[500],
-    marginBottom: theme.spacing.sm,
-  },
-  mediaLabel: {
-    fontSize: theme.typography.body.fontSize,
-    color: theme.palette.neutral[500],
-    textTransform: 'capitalize',
+    backgroundColor: '#f3f4f6',
   },
   gradientOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: '40%',
-    backgroundGradient: 'vertical',
-    gradientColors: ['transparent', 'rgba(0,0,0,0.7)'],
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  contentOverlay: {
+  mediaTypeBadge: {
     position: 'absolute',
-    top: 0,
+    top: 12,
+    left: 12,
+  },
+  workTypeBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    padding: theme.spacing.lg,
-    justifyContent: 'space-between',
+    padding: 16,
   },
-  badgesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.xs,
+  overlayTitle: {
+    fontWeight: '600',
+    fontSize: 16,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    marginBottom: 2,
   },
-  bottomContent: {
-    marginBottom: theme.spacing.md,
+  overlayArtist: {
+    fontSize: 14,
+    fontWeight: '500',
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   actionsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    gap: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
-  commentButton: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 6,
   },
-  commentIcon: {
-    fontSize: 20,
-    color: 'white',
-  },
-  commentCount: {
-    fontSize: theme.typography.caption.fontSize,
-    color: 'white',
+  actionCount: {
+    marginLeft: 4,
     fontWeight: '600',
+    fontSize: 14,
   },
-  remixButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
+  descriptionContainer: {
+    padding: 16,
   },
-  remixIcon: {
-    fontSize: 20,
-    color: 'white',
-  },
-  remixCount: {
-    fontSize: theme.typography.caption.fontSize,
-    color: 'white',
-    fontWeight: '600',
-  },
-  metadata: {
-    // Title and artist area
-  },
-  title: {
-    fontSize: theme.typography.heading.fontSize,
-    fontWeight: theme.typography.heading.fontWeight,
-    color: 'white',
-    marginBottom: theme.spacing.xs,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  artist: {
-    fontSize: theme.typography.body.fontSize,
-    color: theme.colorRoles.interactive[300], // Light blue
-    fontWeight: '500',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+  description: {
+    lineHeight: 20,
+    fontSize: 14,
   },
 });

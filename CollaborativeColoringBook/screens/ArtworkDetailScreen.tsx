@@ -28,6 +28,7 @@ import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
 import { RemixButton } from '../components/RemixButton';
 import MediaTypeBadge from '../components/MediaTypeBadge';
 import WorkTypeBadge from '../components/WorkTypeBadge';
+import { navigateToProfile } from 'utils/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
@@ -64,6 +65,21 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
 
   const hideModal = () => {
     setModalVisible(false);
+  };
+
+  const handleArtistPress = (artistId: string) => {
+    console.log('🎨 ArtworkDetail - Navigating to artist:', artistId);
+    
+    // Check if this is the current user
+    if (currentUser && artistId === currentUser.id) {
+      // It's you! Go to Profile tab
+      navigateToProfile(navigation, artistId, currentUser?.id)
+    } else {
+      // It's another user, go to ArtistProfile
+      navigation.navigate('ArtistProfile', { 
+        userId: artistId
+      });
+    }
   };
 
   // Load comments function
@@ -356,16 +372,14 @@ const onRefresh = useCallback(async () => {
         <View style={styles.infoContainer}>
         <Text style={styles.title}>{currentWork.title}</Text>
           
-          <TouchableOpacity 
-  onPress={() => {
-    if (artist?.id) {
-      navigation.navigate('Profile', { userId: artist.id });
-    } else {
-      console.log('No artist available for navigation');
-    }
-  }}
-  disabled={!artist?.id} // Optional: disable if no artist
->
+        <TouchableOpacity 
+          onPress={() => {
+            if (artist?.id) {
+              handleArtistPress(artist.id);
+            }
+          }}
+          disabled={!artist?.id}
+        >
   <Text style={[styles.artist, styles.clickableArtist]}>
     by {artist?.displayName || 'Unknown Artist'}
   </Text>
