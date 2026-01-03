@@ -3,7 +3,7 @@
     "name": "ForkArt",
     "slug": "ForkArt",
     "scheme": "forkart",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "art.forkart.app",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos for upload.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select images for upload.",
