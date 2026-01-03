@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "art.forkart.app",
-      "buildNumber": "1.0.0",
+      "buildNumber": "2",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos for upload.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select images for upload.",
