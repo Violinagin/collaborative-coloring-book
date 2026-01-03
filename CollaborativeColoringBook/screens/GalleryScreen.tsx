@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   artistName: {
-    color: '#3b82f6', // Your blue for interactive text
+    color: '#3b82f6', 
   },
   loadingText: {
     marginTop: 16,

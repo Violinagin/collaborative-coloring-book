@@ -50,7 +50,7 @@ export const BottomNav: React.FC = () => {
             {IconComponent && (
               <IconComponent
                 size={24}
-                color={active ? theme.colorRoles.art.create : theme.colorRoles.ui.text.secondary}
+                color={active ? theme.colorRoles.art.delete : theme.colorRoles.ui.text.secondary}
               />
             )}
           </TouchableOpacity>
