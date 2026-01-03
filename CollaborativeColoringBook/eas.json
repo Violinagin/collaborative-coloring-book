@@ -7,9 +7,6 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "ios": {
-        "buildNumber": "3" 
-      },
       "distribution": "internal"
     },
     "preview": {
