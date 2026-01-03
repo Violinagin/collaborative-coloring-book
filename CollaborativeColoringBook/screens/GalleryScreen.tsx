@@ -434,13 +434,13 @@ if (loading && works.length === 0) {
       {renderFilterModal()}
       
       {/* Upload FAB */}
-      <TouchableOpacity 
+      {/* <TouchableOpacity 
         style={[styles.uploadFab, { backgroundColor: theme.colorRoles.art.create }]}
         onPress={handleUploadPress}
         activeOpacity={0.8}
       >
         <Icons.Upload size={28} color={theme.colorRoles.ui.text.inverse} />
-      </TouchableOpacity>
+      </TouchableOpacity> */}
       
     </SafeAreaView>
   );
