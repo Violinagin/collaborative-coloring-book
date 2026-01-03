@@ -11,8 +11,6 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types/navigation';
 import { User, UserRole, CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
 import { worksService } from '../services/worksService'; 
@@ -21,15 +19,16 @@ import { socialService } from '../services/socialService';
 import { AlertModal } from '../components/AlertModal';
 import { mediaUtils } from '../utils/mediaUtils';
 import MediaTypeBadge from '../components/MediaTypeBadge';
+import { ProfileScreenProps } from '../types/navigation';
+import { navigateToProfile, navigateToAuth, navigateToUpload, navigateToArtworkDetail, navigateToGallery } from '../utils/navigation';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+type Props = ProfileScreenProps;
 
 const ProfileScreen = ({ route, navigation }: Props) => {
   const [activeTab, setActiveTab] = useState<'originals' | 'remixes' | 'activity'>('originals');
   const { user: currentUser, signOut } = useAuth();
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userOriginals, setUserOriginals] = useState<CreativeWork[]>([]);
-  const { workId } = route.params as any;
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -43,6 +42,9 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
   const [refreshing, setRefreshing] = useState(false);
+  
+
+  
 
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setAlertTitle(title);
@@ -56,111 +58,204 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   };
 
   // Get the user ID from navigation params
-  const { userId } = route.params;
-  
+  const params = route.params || {};
+  const { userId } = params;
+
   // Determine if this is the current user's own profile
-  const isOwnProfile = userId === currentUser?.id;
+  const isOwnProfile = !userId || userId === currentUser?.id;
+
+  // Use userId OR current user's ID
+  const profileUserId = userId || currentUser?.id;
+
+  
+
+  React.useEffect(() => {
+    if (profileUser) {
+      navigation.setOptions({
+        title: isOwnProfile ? 'My Profile' : profileUser.displayName,
+      });
+    } else if (userId) {
+      navigation.setOptions({
+        title: 'Artist Profile',
+      });
+    }
+  }, [profileUser, isOwnProfile, userId, navigation]);
+  
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 ProfileScreen Debug:', {
+      routeParams: params,
+      userId,
+      currentUserId: currentUser?.id,
+      profileUserId,
+      isOwnProfile,
+      routeName: route.name // Check if it's Profile or ArtistProfile
+    });
+  }, [params, currentUser]);
 
   // Use useCallback to memoize the load function
-  const loadUserProfile = useCallback(async () => {
-    if (!userId) {
-      console.log('Skipping profile load - no userId');
-      setLoading(false);
+  const loadUserProfile = useCallback(async (targetUserId: string) => {  // Take userId as parameter
+    console.log('🔍 loadUserProfile called for:', targetUserId);
+    
+    if (!targetUserId) {
+      console.log('❌ No targetUserId provided');
       return;
     }
     
     try {
       setLoading(true);
       setLoadFailed(false);
-      setProfileUser(null); // Reset
+      setProfileUser(null);
       setUserOriginals([]);
       setUserRemixes([]);
       
       // 1. Load user data using userService
-      const userData = await userService.getUser(userId);
+      console.log('📥 Loading user data...');
+      const userData = await userService.getUser(targetUserId);
       setProfileUser(userData);
       
       // 2. Load ALL artworks once
       let allArtworks: CreativeWork[] = [];
-    try {
-      allArtworks = await worksService.getAllWorks();
-    } catch (artError) {
-      console.warn('⚠️ Could not load artworks, continuing with empty list:', artError);
-      // Continue with empty array instead of failing entire profile load
-      allArtworks = [];
-    }
+      try {
+        console.log('📥 Loading artworks...');
+        allArtworks = await worksService.getAllWorks();
+      } catch (artError) {
+        console.warn('⚠️ Could not load artworks:', artError);
+        allArtworks = [];
+      }
       
       // 3. Filter works 
       const userOriginalWorks = allArtworks.filter(artwork => 
-        artwork.artistId === userId && !artwork.originalWorkId
+        artwork.artistId === targetUserId && !artwork.originalWorkId
       );
       setUserOriginals(userOriginalWorks);
 
       const userRemixes = allArtworks.filter(artwork => 
-        artwork.artistId === userId && artwork.originalWorkId
+        artwork.artistId === targetUserId && artwork.originalWorkId
       );
       setUserRemixes(userRemixes);
       
-      // 4. Load social data - can fail independently
+      // 4. Load social data
       try {
-        if (currentUser && currentUser.id !== userId) {
-          const followingStatus = await socialService.isFollowing(currentUser.id, userId);
+        if (currentUser && currentUser.id !== targetUserId) {
+          const followingStatus = await socialService.isFollowing(currentUser.id, targetUserId);
           setIsFollowing(followingStatus);
         }
         
-        // Load counts
         const [followers, following] = await Promise.all([
-          socialService.getFollowerCount(userId),
-          socialService.getFollowingCount(userId)
+          socialService.getFollowerCount(targetUserId),
+          socialService.getFollowingCount(targetUserId)
         ]);
         
         setFollowerCount(followers);
         setFollowingCount(following);
       } catch (socialError) {
-        console.warn('⚠️ Social data failed to load:', socialError);
-        // Keep default/previous values
+        console.warn('⚠️ Social data failed:', socialError);
       }
       
     } catch (error) {
       console.error('💥 Critical error loading profile:', error);
       setLoadFailed(true);
-      showAlert('Error', 'Failed to load user profile. The user may not exist.', 'error');
+      showAlert('Error', 'Failed to load user profile.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [userId, currentUser]);
+  }, [currentUser]); // Remove userId dependency since we pass it as parameter
 
   const onRefresh = useCallback(async () => {
+    if (!profileUserId) return;
     setRefreshing(true);
-    await loadUserProfile();
+    await loadUserProfile(profileUserId);
     setRefreshing(false);
-  }, [loadUserProfile]);
+  }, [profileUserId, loadUserProfile]);
 
-
-  // Load user profile data with proper cleanup
+  // Handle missing user ID
   useEffect(() => {
+    console.log('🔍 useEffect: Checking profileUserId', profileUserId);
     
-    if (!userId) {
-      console.log('No user ID provided, redirecting to auth');
+    if (!profileUserId) {
+      console.log('❌ No profileUserId, redirecting to Auth');
       navigation.replace('Auth');
       return;
     }
+  }, [profileUserId, navigation]);
 
-    let isMounted = true;
-   // Load profile without timeout
-  loadUserProfile();
-
-  const unsubscribe = navigation.addListener('focus', () => {
-    if (isMounted) {
-      loadUserProfile();
+  // RESET ALL STATE WHEN PROFILE USER CHANGES
+  useEffect(() => {
+    console.log('🔄 Profile userId changed, resetting state');
+    
+    // Reset all state to defaults
+    setProfileUser(null);
+    setUserOriginals([]);
+    setUserRemixes([]);
+    setLoading(true);
+    setIsFollowing(false);
+    setFollowerCount(0);
+    setFollowingCount(0);
+    
+  }, [profileUserId]);
+  
+  // Load user profile data
+  useEffect(() => {
+    console.log('🔍 useEffect: Loading profile for', profileUserId);
+    
+    if (!profileUserId) {
+      console.log('⏸️ Skipping load - no profileUserId');
+      return;
     }
-  });
+    
+    let isMounted = true;
+    
+    const loadProfile = async () => {
+      console.log('🚀 Starting profile load...');
+      await loadUserProfile(profileUserId);
+    };
+    
+    loadProfile();
 
-  return () => {
-    isMounted = false;
-    unsubscribe();
-  };
-}, [userId, navigation, loadUserProfile]);
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (isMounted && profileUserId) {
+        console.log('🔄 Refocusing, reloading profile...');
+        loadUserProfile(profileUserId);
+      }
+    });
+
+    return () => {
+      console.log('🧹 Cleanup ProfileScreen');
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [profileUserId, navigation, loadUserProfile]); // Add loadUserProfile to dependencies
+
+  // Early return if no user ID
+  if (!profileUserId) {
+    console.log('🔄 Showing loading - no profileUserId');
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading user...</Text>
+      </View>
+    );
+  }
+
+  if (loading && !profileUser) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>
+          {profileUserId === currentUser?.id 
+            ? 'Loading your profile...' 
+            : 'Loading profile...'
+          }
+        </Text>
+      </View>
+    );
+  }
+
+const handleArtworkPress = (workId: string) => {
+  navigateToArtworkDetail(navigation, workId);
+};
   
   // Handle Follow Actions
   const handleFollowToggle = async () => {
@@ -266,7 +361,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         </Text>
         <TouchableOpacity 
           style={styles.retryButton}
-          onPress={loadUserProfile}
+          onPress={() => navigateToProfile}
         >
           <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
@@ -298,7 +393,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         </Text>
         <TouchableOpacity 
           style={styles.authButton}
-          onPress={() => navigation.navigate('Auth')}
+          onPress={() => navigateToAuth}
         >
           <Text style={styles.authButtonText}>Sign Up / Login</Text>
         </TouchableOpacity>
@@ -416,7 +511,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
           {isOwnProfile && (
             <TouchableOpacity 
               style={styles.uploadPrompt}
-              onPress={() => navigation.navigate('Upload')}
+              onPress={() => navigateToUpload}
             >
               <Text style={styles.uploadPromptText}>Create Your First Original</Text>
             </TouchableOpacity>
@@ -432,7 +527,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         renderItem={({ item }: { item: CreativeWork }) => (
           <TouchableOpacity 
             style={styles.artworkItem}
-            onPress={() => navigation.navigate('ArtworkDetail', { workId: item.id })}
+            onPress={() => handleArtworkPress(item.id)}
           >
             <Image source={{ uri: item.assetUrl }} style={styles.artworkImage} />
           </TouchableOpacity>
@@ -457,7 +552,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
         {isOwnProfile && (
           <TouchableOpacity 
             style={styles.uploadPrompt}
-            onPress={() => navigation.navigate('Gallery', {})}
+            onPress={() => navigateToGallery}
           >
             <Text style={styles.uploadPromptText}>Browse Work to Remix</Text>
           </TouchableOpacity>
@@ -483,7 +578,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
           return (
             <TouchableOpacity 
               style={styles.artworkItem}
-              onPress={() => navigation.navigate('ArtworkDetail', { workId: item.id })}
+              onPress={() => handleArtworkPress(item.id)}
             >
               {item.assetUrl ? (
                 <Image 
@@ -536,7 +631,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       {isOwnProfile && (
         <TouchableOpacity 
           style={styles.uploadPrompt}
-          onPress={() => navigation.navigate('Gallery', {})}
+          onPress={() => navigateToGallery}
         >
           <Text style={styles.uploadPromptText}>Explore the community</Text>
         </TouchableOpacity>

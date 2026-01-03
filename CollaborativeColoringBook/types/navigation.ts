@@ -1,33 +1,86 @@
-import { CreativeWork, User  } from './core'; 
+// types/navigation.ts - UPDATED FOR ROOTNAVIGATOR
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { CreativeWork } from './core';
 
+export type AuthParams = {
+  redirectTo?: 'Upload' | 'CreateRemix' | 'Profile' | 'Gallery';
+  redirectParams?: any;
+  message?: string;
+};
+
+// ============ ROOT STACK PARAMS ============
+// This is the highest level navigator
 export type RootStackParamList = {
+  // Auth screen (shown when not logged in)
+  Auth: AuthParams | undefined;
+  Public: undefined;
+  
+  // Main tabs (shown when logged in)
+  MainTabs: { screen?: 'GalleryTab' | 'UploadTab' | 'ProfileTab' } | undefined;
+  
+  // Public screens (can be accessed directly)
   Gallery: { 
     showFilterModal?: boolean;
-  };  
-  ArtworkDetail: { workId: string };
-  Profile: { userId: string; }; 
-//  Coloring: { artwork: CreativeWork };
-  SkiaColoring: { 
-    work: CreativeWork;
-    imageUrl: string;
-    title?: string;
+    scrollToTop?: boolean;
+  };
+  ArtworkDetail: { 
+    workId: string;
+    commentModal?: boolean;
+    autoLike?: boolean;
+  };
+  Profile: { userId?: string;
+    isOtherUserProfile?: boolean;
+  };
+  UserProfile: { userId: string };
+  
+  // Protected screens (should prompt login if not authenticated)
+  CreateRemix: {
+    originalWorkId: string;
+    originalWorkTitle?: string;
   };
   Upload: {
     originalWorkId?: string;
     originalWorkTitle?: string;
     originalWork?: CreativeWork;
   } | undefined;
-  CreateRemix: {
-    originalWorkId: string;
-    originalWorkTitle?: string;
-  };
-  Debug: undefined;
-  Auth: undefined;
   EditProfile: undefined;
+  
+  // Development
+  ThemePreview: undefined;
+  Debug: undefined;
 };
+
+// ============ TAB PARAMS ============
+// Bottom tab navigator
+export type TabParamList = {
+  GalleryTab: undefined;
+  UploadTab: undefined;
+  ProfileTab: undefined;
+};
+
+// ============ SCREEN PROP TYPES (for easy use in screens) ============
+
+export type GalleryScreenProps = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
+export type ArtworkDetailScreenProps = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
+export type AuthScreenProps = NativeStackScreenProps<RootStackParamList, 'Auth'>;
+export type CreateRemixScreenProps = NativeStackScreenProps<RootStackParamList, 'CreateRemix'>;
+export type UploadScreenProps = NativeStackScreenProps<RootStackParamList, 'Upload'>;
+export type ProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+export type EditProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
+export type ThemePreviewScreenProps = NativeStackScreenProps<RootStackParamList, 'ThemePreview'>;
+
+// Tab screen props (if needed for tab listeners)
+export type GalleryTabProps = BottomTabScreenProps<TabParamList, 'GalleryTab'>;
+export type UploadTabProps = BottomTabScreenProps<TabParamList, 'UploadTab'>;
+export type ProfileTabProps = BottomTabScreenProps<TabParamList, 'ProfileTab'>;
+
+// Combined type for NavigationContainer
+export type AppParamList = RootStackParamList & 
+  TabParamList;
 
 declare global {
   namespace ReactNavigation {
-    interface RootParamList extends RootStackParamList {}
+    interface RootParamList extends AppParamList {}
   }
 }
