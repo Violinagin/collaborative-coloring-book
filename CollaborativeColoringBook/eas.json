@@ -17,6 +17,7 @@
       }
     },
     "production": {
+      "distribution": "store",
       "autoIncrement": false,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "$EXPO_PUBLIC_SUPABASE_URL",
