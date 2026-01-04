@@ -3,7 +3,7 @@
     "name": "ForkArt",
     "slug": "ForkArt",
     "scheme": "forkart",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,6 +11,14 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/65c4cb38-e6c9-41c8-8dee-c962ffc452c7",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -19,7 +27,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "art.forkart.app",
-      "buildNumber": "1.0.0",
+      "buildNumber": "4",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos for upload.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select images for upload.",
@@ -51,7 +59,8 @@
         {
           "photosPermission": "The app needs access to your photos."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
