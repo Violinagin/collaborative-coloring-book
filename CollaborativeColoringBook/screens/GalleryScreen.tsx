@@ -2,10 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   FlatList, 
-  Image, 
   StyleSheet, 
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   Modal,
   ScrollView,

@@ -1,18 +1,15 @@
-// components/Navigation/AppHeader.tsx
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { ThemedText } from '../shared/ThemedText';
 import { Icons } from '../shared/Icon';
 
 interface AppHeaderProps {
-  // Optional override for title
   title?: string;
-  // Show back button? (auto-detected by default)
   showBackButton?: boolean;
-  // Show filter button? (false by default)
   showFilterButton?: boolean;
 }
 
@@ -25,6 +22,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const navigation = useNavigation();
   const route = useRoute();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // Determine if we should show back button
   const shouldShowBackButton = showBackButton ?? navigation.canGoBack();
@@ -32,38 +30,48 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   // Get screen title from route if not provided
   const screenTitle = title || getTitleFromRoute(route.name);
 
-  // Handle back navigation
+  // Calculate iOS-safe padding
+  const headerPaddingTop = Platform.select({
+    ios: Math.max(16, insets.top),
+    android: 16,
+    default: 16,
+  });
+
   const handleBackPress = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
     }
   };
 
-  // Handle filter press (Gallery only)
   const handleFilterPress = () => {
-    // This will be handled by the GalleryScreen
     navigation.setParams({ showFilterModal: true } as any);
   };
 
-  // Handle login press
   const handleLoginPress = () => {
     navigation.navigate('Auth' as never);
   };
 
+  // Dynamic styles that depend on props/state
+  const dynamicStyles = {
+    container: {
+      backgroundColor: theme.colorRoles.ui.card,
+      borderBottomColor: theme.colorRoles.ui.border,
+      paddingTop: headerPaddingTop,
+    },
+    loginText: {
+      color: theme.colorRoles.interactive.link,
+    },
+  };
+
   return (
-    <View style={[
-      styles.container,
-      { 
-        backgroundColor: theme.colorRoles.ui.card,
-        borderBottomColor: theme.colorRoles.ui.border,
-      }
-    ]}>
+    <View style={[styles.container, dynamicStyles.container]}>
       {/* Left Section: Back button or empty space */}
       <View style={styles.leftSection}>
         {shouldShowBackButton ? (
           <TouchableOpacity 
             style={styles.backButton}
             onPress={handleBackPress}
+            hitSlop={HIT_SLOP}
           >
             <Icons.Back size={24} color={theme.colorRoles.ui.text.primary} />
           </TouchableOpacity>
@@ -81,31 +89,36 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
       {/* Right Section: Filter/Login/User */}
       <View style={styles.rightSection}>
-        {/* Filter Button (Gallery only) */}
+        {/* Filter button - shows for everyone on Gallery screen */}
         {showFilterButton && (
           <TouchableOpacity 
             style={styles.filterButton}
             onPress={handleFilterPress}
+            hitSlop={HIT_SLOP}
           >
             <Icons.More size={24} color={theme.colorRoles.ui.text.secondary} />
           </TouchableOpacity>
         )}
-
-        {/* Login / User Avatar */}
-        {!user ? (
+        
+        {/* Login button - shows only when NOT logged in */}
+        {!user && (
           <TouchableOpacity 
             style={styles.loginButton}
             onPress={handleLoginPress}
+            hitSlop={HIT_SLOP}
           >
             <ThemedText 
               type="body" 
-              style={{ color: theme.colorRoles.interactive.link }}
+              style={[styles.loginButtonText, dynamicStyles.loginText]}
+              numberOfLines={1}
             >
               Login
             </ThemedText>
           </TouchableOpacity>
-        ) : (
-          // Optionally show user avatar or nothing
+        )}
+        
+        {/* Empty spacer when logged in AND no filter button needed */}
+        {user && !showFilterButton && (
           <View style={styles.userSpacer} />
         )}
       </View>
@@ -128,44 +141,64 @@ const getTitleFromRoute = (routeName: string): string => {
   return titleMap[routeName] || routeName;
 };
 
+// Reusable constants
+const HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
+
+// Static styles - everything that doesn't change
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     borderBottomWidth: 1,
+    minHeight: Platform.select({
+      ios: 44,
+      android: 56,
+      default: 56,
+    }),
   },
   leftSection: {
-    width: 40,
+    width: 44,
     alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   centerSection: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   rightSection: {
-    width: 40,
-    alignItems: 'flex-end',
+    flexDirection: 'row', // Moved from render to here
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: 88, // Fixed width for right section
   },
   backButton: {
-    padding: 4,
+    padding: 8,
   },
   leftSpacer: {
-    width: 40,
+    width: 44,
   },
   title: {
     fontWeight: '600',
+    fontSize: 17,
+    textAlign: 'center',
   },
   filterButton: {
-    padding: 4,
+    padding: 8,
+    marginRight: 8, // Space between filter and login
   },
   loginButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   userSpacer: {
-    width: 40,
+    width: 44,
   },
 });
