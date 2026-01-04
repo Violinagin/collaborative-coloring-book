@@ -2,8 +2,10 @@
 import { CreativeWork } from '../types/core';
 import { RootStackParamList } from '../types/navigation';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NavigationProp, CommonActions } from '@react-navigation/native';
 
 type AppNavigation = NativeStackNavigationProp<RootStackParamList>;
+type AnyNavigation = NavigationProp<RootStackParamList> | any;
 
 export const handleArtistPressNav =(
     navigation: AppNavigation,
@@ -166,6 +168,130 @@ export const navigateToUpload = (
     // Logged in - navigate to Upload
     navigation.navigate('Upload', params);
   };
+
+  export const navigateToUploadFromRemix = (
+    navigation: AppNavigation,
+    user: any,
+    params?: {
+      originalWorkId?: string;
+      originalWorkTitle?: string;
+      originalWork?: CreativeWork;
+    }
+  ) => {
+    if (!user) {
+      navigation.navigate('Auth', {
+        message: 'Sign in to create a remix',
+        redirectTo: 'Upload',
+        redirectParams: params
+      });
+      return;
+    }
+  
+    // We need to switch to UploadTab which contains the Upload screen
+    // This is a two-step navigation
+    navigation.navigate('MainTabs', {
+      screen: 'UploadTab',
+    });
+    
+    // Then navigate to Upload screen within that tab
+    // We'll use a timeout to ensure tab switch happens first
+    setTimeout(() => {
+      // Use dispatch to navigate within the UploadTab
+      navigation.dispatch(
+        CommonActions.navigate({
+          name: 'UploadTab',
+          params: {
+            screen: 'Upload',
+            params: params
+          }
+        })
+      );
+    }, 100);
+  };
+
+  export const NavigationCoordinator = {
+    navigateToUploadForRemix: (
+      navigation: AnyNavigation,
+      user: any,
+      params?: any
+    ) => {
+      if (!user) {
+        navigation.navigate('Auth', {
+          message: 'Sign in to create a remix',
+          redirectTo: 'Upload',
+          redirectParams: params
+        });
+        return;
+      }
+  
+      // Use reset for a clean navigation state
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 1, // This sets which route is active in the array below
+          routes: [
+            {
+              name: 'MainTabs',
+              state: {
+                routes: [
+                  { name: 'GalleryTab' },
+                  { 
+                    name: 'UploadTab',
+                    state: {
+                      routes: [
+                        { 
+                          name: 'Upload',
+                          params: params 
+                        }
+                      ]
+                    }
+                  },
+                  { name: 'ProfileTab' }
+                ],
+                index: 1 // This selects UploadTab (0 = GalleryTab, 1 = UploadTab, 2 = ProfileTab)
+              }
+            }
+          ]
+        })
+      );
+    },
+  
+    navigateToArtworkDetailAfterUpload: (
+      navigation: AnyNavigation,
+      workId: string
+    ) => {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'MainTabs',
+              state: {
+                routes: [
+                  {
+                    name: 'GalleryTab',
+                    state: {
+                      routes: [
+                        { name: 'Gallery' },
+                        { 
+                          name: 'ArtworkDetail',
+                          params: { workId } 
+                        }
+                      ],
+                      index: 1 // Shows ArtworkDetail
+                    }
+                  },
+                  { name: 'UploadTab' },
+                  { name: 'ProfileTab' }
+                ],
+                index: 0 // Selects GalleryTab
+              }
+            }
+          ]
+        })
+      );
+    }
+  };
+
 // ============ ARTWORK DETAIL NAVIGATION ============
 export const navigateToArtworkDetail = (
     navigation: AppNavigation,

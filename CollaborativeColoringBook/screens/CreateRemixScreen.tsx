@@ -17,6 +17,7 @@ import { CreativeWork, WorkWithContext } from '../types/core';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { StackNavigationProp } from '@react-navigation/stack';
+import {  NavigationCoordinator } from '../utils/navigation'; 
 
 type CreateRemixScreenRouteProp = RouteProp<RootStackParamList, 'CreateRemix'>;
 type CreateRemixScreenNavigationProp = StackNavigationProp<RootStackParamList, 'CreateRemix'>;
@@ -53,10 +54,10 @@ const CreateRemixScreen = () => {
   const handleContinue = () => {
     if (!originalWork) return;
 
-    navigation.navigate('Upload', {
-        originalWorkId,
-        originalWork
-      });
+    NavigationCoordinator.navigateToUploadForRemix(navigation as any, user, {
+      originalWorkId,
+      originalWork
+    });
     };  
 
   if (loading) {

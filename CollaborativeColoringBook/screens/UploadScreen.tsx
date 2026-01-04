@@ -20,6 +20,7 @@ import { AlertModal } from '../components/AlertModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { mediaUtils } from '../utils/mediaUtils';
 import { UploadScreenProps } from '../types/navigation';
+import { NavigationCoordinator } from '../utils/navigation';
 import { navigateToProfile, navigateToAuth, navigateToUpload, navigateToArtworkDetail } from '../utils/navigation';
 
 
@@ -242,8 +243,8 @@ const UploadScreen = ({ navigation, route }: Props) => {
     setShowSuccessModal(false);
     
     if (createdWorkId) {
-      // Navigate to the newly created artwork
-      navigateToArtworkDetail;
+      NavigationCoordinator.navigateToArtworkDetailAfterUpload(navigation, createdWorkId);
+    }
       
       // Optional: Clear the form for next upload
       setTitle('');
@@ -251,7 +252,6 @@ const UploadScreen = ({ navigation, route }: Props) => {
       setImageUri(null);
       setTags([]);
       setTagInput('');
-    }
   };
 
   // ==================== RENDER ====================
