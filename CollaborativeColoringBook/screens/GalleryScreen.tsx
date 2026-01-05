@@ -11,7 +11,7 @@ import {
   
 } from 'react-native';
 
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import { worksService } from '../services/worksService';
 import { socialService } from '../services/socialService';
@@ -43,6 +43,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   const theme = useTheme();
   const { user } = useAuth();
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
 
   // State
   const [works, setWorks] = useState<CreativeWork[]>([]);
@@ -380,19 +381,19 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   // Loading state
 if (loading && works.length === 0) {
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
       <FlatList
         data={[1, 2, 3]} // Show 3 skeleton cards
         renderItem={() => <WorkCardSkeleton />}
         contentContainerStyle={styles.galleryList}
         showsVerticalScrollIndicator={false}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
       
       {/* Active filters summary */}
       <View style={styles.activeFilters}>
@@ -440,7 +441,7 @@ if (loading && works.length === 0) {
         <Icons.Upload size={28} color={theme.colorRoles.ui.text.inverse} />
       </TouchableOpacity> */}
       
-    </SafeAreaView>
+    </View>
   );
 };
 

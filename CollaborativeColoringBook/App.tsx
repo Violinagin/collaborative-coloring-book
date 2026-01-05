@@ -1,4 +1,5 @@
-// App.tsx - PROPER NAVIGATION STRUCTURE
+import './app-polyfills';
+
 import React from 'react';
 import { LogBox, Platform } from 'react-native';
 import { AuthProvider } from './context/AuthContext';

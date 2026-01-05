@@ -1,0 +1,9 @@
+#!/bin/bash
+# Clean and start
+rm -rf $TMPDIR/metro-* 2>/dev/null
+rm -rf .expo 2>/dev/null
+
+NODE_OPTIONS="--require ./preload-polyfills.js" \
+EXPO_NO_TELEMETRY=1 \
+REACT_NATIVE_PACKAGER_HOSTNAME=192.168.4.22 \
+npx expo start --lan --clear --max-workers=1
