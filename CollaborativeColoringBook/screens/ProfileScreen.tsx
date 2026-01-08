@@ -83,10 +83,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     setShowLogoutModal(false);
     try {
       await signOut();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Gallery' }],
-      });
+      navigateToGallery;
     } catch (error: any) {
       console.error('❌ Logout error:', error);
       showAlert('Logout Failed', error?.message || 'Please try again.', 'error');

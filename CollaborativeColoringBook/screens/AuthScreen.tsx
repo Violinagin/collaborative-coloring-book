@@ -100,7 +100,7 @@ const handleAlertClose = () => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Collaborative Coloring Book</Text>
+          <Text style={styles.title}>Fork Art</Text>
           <Text style={styles.subtitle}>
             {isSignUp ? 'Create your account' : 'Welcome back!'}
           </Text>
@@ -116,6 +116,7 @@ const handleAlertClose = () => {
                 onChangeText={setUsername}
                 autoCapitalize="none"
                 autoCorrect={false}
+                placeholderTextColor="#666"
               />
               <TextInput
                 style={styles.input}
@@ -123,6 +124,7 @@ const handleAlertClose = () => {
                 value={displayName}
                 onChangeText={setDisplayName}
                 autoCorrect={false}
+                placeholderTextColor="#666"
               />
             </>
           )}
@@ -135,6 +137,7 @@ const handleAlertClose = () => {
             autoCapitalize="none"
             keyboardType="email-address"
             autoCorrect={false}
+            placeholderTextColor="#666"
           />
           
           <TextInput
@@ -144,6 +147,7 @@ const handleAlertClose = () => {
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            placeholderTextColor="#666"
           />
 
           <TouchableOpacity

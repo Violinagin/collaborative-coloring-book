@@ -193,19 +193,19 @@ export const createWorkPreview = (work: CreativeWork) => {
       return { isValid: false, error: 'Media type is required' };
     }
     
-    // Validate based on media type
-    switch (work.mediaType) {
-      case 'line_art':
-        if (!work.mediaConfig?.isColorable) {
-          return { isValid: false, error: 'Line art must be colorable' };
-        }
-        break;
-      case 'colored_art':
-        if (work.mediaConfig?.isColorable !== false) {
-          return { isValid: false, error: 'Colored art must not be colorable' };
-        }
-        break;
-    }
+    // // Validate based on media type
+    // switch (work.mediaType) {
+    //   case 'line_art':
+    //     if (!work.mediaConfig?.isColorable) {
+    //       return { isValid: false, error: 'Line art must be colorable' };
+    //     }
+    //     break;
+    //   case 'colored_art':
+    //     if (work.mediaConfig?.isColorable !== false) {
+    //       return { isValid: false, error: 'Colored art must not be colorable' };
+    //     }
+    //     break;
+    // }
     
     return { isValid: true };
   };
