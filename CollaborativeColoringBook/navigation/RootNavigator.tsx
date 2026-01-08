@@ -35,6 +35,8 @@ const MainTab = createBottomTabNavigator<TabParamList>();
 const CustomStackHeader = (props: any) => {
     const route = props.route;
     
+    const onFilterPress = route.params?.onFilterPress;
+
     // Determine which features to show based on route
     const getHeaderConfig = (routeName: string) => {
       switch (routeName) {
@@ -42,6 +44,7 @@ const CustomStackHeader = (props: any) => {
           return {
             showFilterButton: true,
             title: 'ForkArt',
+            onFilterPress: onFilterPress,
           };
         case 'ArtworkDetail':
           return {

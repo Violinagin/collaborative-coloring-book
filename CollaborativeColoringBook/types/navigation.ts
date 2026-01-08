@@ -23,6 +23,7 @@ export type RootStackParamList = {
   Gallery: { 
     showFilterModal?: boolean;
     scrollToTop?: boolean;
+    onFilterPress?: () => void;
   };
   ArtworkDetail: { 
     workId: string;

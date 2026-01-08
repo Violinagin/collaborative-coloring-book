@@ -74,7 +74,7 @@ export const HeartButton: React.FC<HeartButtonProps> = ({
           marginRight: currentSize.spacing,
         }
       ]}>
-        {isLiked ? '💜😈' : '🤍'}
+        {isLiked ? '💜' : '🤍'}
       </Text>
       <Text style={[
         styles.count,

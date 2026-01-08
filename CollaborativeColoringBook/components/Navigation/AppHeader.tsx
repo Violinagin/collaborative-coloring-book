@@ -11,13 +11,16 @@ interface AppHeaderProps {
   title?: string;
   showBackButton?: boolean;
   showFilterButton?: boolean;
+  onFilterPress?: () => void;
+  navigation?: any;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   title,
   showBackButton,
   showFilterButton = false,
-}) => {
+  onFilterPress,
+}:AppHeaderProps) => {
   const theme = useTheme();
   const navigation = useNavigation();
   const route = useRoute();
@@ -44,7 +47,20 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const handleFilterPress = () => {
-    navigation.setParams({ showFilterModal: true } as any);
+    console.log('🔘 Filter button pressed');
+    
+    // Option 1: Use callback if provided
+    if (onFilterPress) {
+      onFilterPress();
+      return;
+    }
+    
+    // Option 2: Fall back to route params
+    if (navigation) {
+      navigation.setParams({ showFilterModal: true });
+    } else {
+      console.warn('⚠️ No filter handler available');
+    }
   };
 
   const handleLoginPress = () => {

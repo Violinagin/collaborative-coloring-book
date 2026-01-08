@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useLayoutEffect } from 'react';
 import { 
   View, 
   FlatList, 
@@ -78,6 +78,21 @@ const GalleryScreen = ({ navigation, route }: Props) => {
       loadWorks();
     }
   }, [isFocused, user]);
+
+  // Watch for param changes
+  useEffect(() => {
+    const paramValue = route.params?.showFilterModal;
+    if (paramValue !== undefined) {
+      setShowFilterModal(paramValue);
+      
+      // Clear the param after reading
+      if (paramValue) {
+        setTimeout(() => {
+          navigation.setParams({ showFilterModal: undefined });
+        }, 100);
+      }
+    }
+  }, [route.params?.showFilterModal]);
 
   const loadWorks = async () => {
     try {
