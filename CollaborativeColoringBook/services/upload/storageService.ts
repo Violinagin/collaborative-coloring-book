@@ -1,5 +1,5 @@
 // services/storageService.ts - FINAL OPTIMIZED VERSION
-import { getSupabase } from '../lib/supabase';
+import { getSupabase } from '../../lib/supabase';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -52,26 +52,23 @@ export const storageService = {
     fileName?: string,
     onProgress?: (progress: number) => void
   ): Promise<ServiceResult<string>> {
-// Generate a unique ID for this upload
-const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const abortController = new AbortController();
     
-// Create abort controller for fetch requests
-const abortController = new AbortController();
-
-// Create upload controller
-const uploadController: UploadController = {
-  cancel: () => {
-    console.log(`🚫 Cancelling upload: ${uploadId}`);
-    abortController.abort();
-    uploadController.isCancelled = true;
-    this.activeUploads.delete(uploadId);
-  },
-  isCancelled: false
-};
-
-// Store the controller
-this.activeUploads.set(uploadId, uploadController);
-
+    // Create upload controller
+    const uploadController: UploadController = {
+      cancel: () => {
+        console.log(`🚫 Cancelling upload: ${uploadId}`);
+        abortController.abort();
+        uploadController.isCancelled = true;
+        this.activeUploads.delete(uploadId);
+      },
+      isCancelled: false
+    };
+  
+    // Store the controller
+    this.activeUploads.set(uploadId, uploadController);
+  
     try {
 
       const fileExt = getFileExtension(fileUri);
@@ -197,6 +194,7 @@ this.activeUploads.set(uploadId, uploadController);
 
       // Clean up
       this.activeUploads.delete(uploadId);
+      abortController.abort();
       
       return {
         success: true,
@@ -207,7 +205,13 @@ this.activeUploads.set(uploadId, uploadController);
     } catch (error: any) {
       // Clean up on error
       this.activeUploads.delete(uploadId);
-      console.error('💥 Upload failed:', error);
+
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
+
+    console.error('💥 Upload failed:', error);
+
       // Special handling for cancellation
       if (uploadController.isCancelled || error.name === 'AbortError') {
         console.log('ℹ️ Upload was cancelled by user');
@@ -216,7 +220,7 @@ this.activeUploads.set(uploadId, uploadController);
           data: null,
           error: 'Upload cancelled'
         };
-      }
+      }  
       
       return {
         success: false,

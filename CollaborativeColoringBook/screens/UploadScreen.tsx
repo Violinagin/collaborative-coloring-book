@@ -13,8 +13,8 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { RootStackParamList } from '../types/navigation';
-import { worksService } from '../services/worksService';
-import { storageService, UploadController } from '../services/storageService';
+import { worksService } from '../services/api/works';
+import { storageService, UploadController } from '../services/upload/storageService';
 import { useAuth } from '../context/AuthContext';
 import { AlertModal } from '../components/AlertModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';

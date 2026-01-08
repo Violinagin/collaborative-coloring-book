@@ -11,7 +11,7 @@ import {
   Alert
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { worksService } from '../services/worksService';
+import { worksService } from '../services/api/works';
 import { useAuth } from '../context/AuthContext';
 import { CreativeWork, WorkWithContext } from '../types/core';
 import { RouteProp } from '@react-navigation/native';

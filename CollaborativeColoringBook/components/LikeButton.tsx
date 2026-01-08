@@ -7,6 +7,7 @@ type LikeButtonProps = {
   likeCount: number;
   onPress: () => void;
   size?: 'small' | 'medium' | 'large'; // Optional size prop
+  disabled: boolean;
 };
 
 const LikeButton = ({ 

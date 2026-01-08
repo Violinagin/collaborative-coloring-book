@@ -10,13 +10,13 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { User, UserRole, CreativeWork } from '../types/core';
 import { useAuth } from '../context/AuthContext';
-import { worksService } from '../services/worksService'; 
-import { userService } from '../services/userService';
-import { socialService } from '../services/socialService';
+import { worksService } from '../services/api/works'; 
+import { userService } from '../services/api/users';
+import { socialService } from '../services/api/social';
 import { AlertModal } from '../components/AlertModal';
-import { mediaUtils } from '../utils/mediaUtils';
 import MediaTypeBadge from '../components/MediaTypeBadge';
 import { ProfileScreenProps } from '../types/navigation';
 import { 
@@ -29,6 +29,7 @@ type Props = ProfileScreenProps;
 
 const ProfileScreen = ({ route, navigation }: Props) => {
   // State
+  const isFocused = useIsFocused();
   const [activeTab, setActiveTab] = useState<'originals' | 'remixes' | 'activity'>('originals');
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userOriginals, setUserOriginals] = useState<CreativeWork[]>([]);
@@ -115,51 +116,51 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       setProfileUser(userData);
       
       // Load artworks
-      let allArtworks: CreativeWork[] = [];
-      try {
-        allArtworks = await worksService.getAllWorks();
-      } catch (artError) {
-        console.warn('⚠️ Could not load artworks:', artError);
-        allArtworks = [];
-      }
+      let userArtworks: CreativeWork[] = [];
+    try {
+      userArtworks = await worksService.getUserArtworks(targetUserId);
+    } catch (artError) {
+      console.warn('⚠️ Could not load user artworks:', artError);
+      userArtworks = [];
+    }
       
       // Filter works
-      const originals = allArtworks.filter(artwork => 
-        artwork.artistId === targetUserId && !artwork.originalWorkId
+      const originals = userArtworks.filter(artwork => 
+        !artwork.originalWorkId
       );
       setUserOriginals(originals);
-
-      const remixes = allArtworks.filter(artwork => 
-        artwork.artistId === targetUserId && artwork.originalWorkId
+  
+      const remixes = userArtworks.filter(artwork => 
+        !!artwork.originalWorkId
       );
       setUserRemixes(remixes);
-      
+
       // Load social data
       try {
-        if (currentUser && currentUser.id !== targetUserId) {
-          const followingStatus = await socialService.isFollowing(currentUser.id, targetUserId);
-          setIsFollowing(followingStatus);
-        }
-        
-        const [followers, following] = await Promise.all([
-          socialService.getFollowerCount(targetUserId),
-          socialService.getFollowingCount(targetUserId)
-        ]);
-        
-        setFollowerCount(followers);
-        setFollowingCount(following);
-      } catch (socialError) {
-        console.warn('⚠️ Social data failed:', socialError);
+      if (currentUser && currentUser.id !== targetUserId) {
+        const followingStatus = await socialService.isFollowing(currentUser.id, targetUserId);
+        setIsFollowing(followingStatus);
       }
       
-    } catch (error) {
-      console.error('💥 Critical error loading profile:', error);
-      setLoadFailed(true);
-      showAlert('Error', 'Failed to load user profile.', 'error');
-    } finally {
-      setLoading(false);
+      const [followers, following] = await Promise.all([
+        socialService.getFollowerCount(targetUserId),
+        socialService.getFollowingCount(targetUserId)
+      ]);
+      
+      setFollowerCount(followers);
+      setFollowingCount(following);
+    } catch (socialError) {
+      console.warn('⚠️ Social data failed:', socialError);
     }
-  }, [currentUser, showAlert]);
+    
+  } catch (error) {
+    console.error('💥 Critical error loading profile:', error);
+    setLoadFailed(true);
+    showAlert('Error', 'Failed to load user profile.', 'error');
+  } finally {
+    setLoading(false);
+  }
+}, [currentUser, showAlert]);
 
   const onRefresh = useCallback(async () => {
     if (!profileUserId) return;
@@ -185,6 +186,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
 
   // Handle missing user ID
   useEffect(() => {
+    if (!profileUserId || !isFocused) return;
     if (!profileUserId) {
       console.log('❌ No profileUserId, redirecting');
       navigation.replace('Auth');
@@ -204,28 +206,34 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   }, [profileUserId]);
 
   // Load profile data
-  useEffect(() => {
-    if (!profileUserId) return;
-    
-    let isMounted = true;
-    
-    const loadProfile = async () => {
-      await loadUserProfile(profileUserId);
-    };
-    
-    loadProfile();
-
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (isMounted && profileUserId) {
-        loadUserProfile(profileUserId);
+  useFocusEffect(
+    useCallback(() => {
+      
+      if (!profileUserId) {
+        console.log('⏸️ No profileUserId, skipping load');
+        return;
       }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, [profileUserId, navigation, loadUserProfile]);
+      
+      const loadProfile = async () => {
+        try {
+          await loadUserProfile(profileUserId);
+        } catch (error) {
+          console.error('❌ Failed to load profile:', error);
+        }
+      };
+      
+      loadProfile();
+      
+      // Optional: Add a refresh listener
+      const unsubscribe = navigation.addListener('focus', () => {
+        // Only refresh if needed
+      });
+      
+      return () => {
+        unsubscribe();
+      };
+    }, [profileUserId, loadUserProfile, navigation])
+  );
 
   // ========== RENDER HELPERS ==========
 

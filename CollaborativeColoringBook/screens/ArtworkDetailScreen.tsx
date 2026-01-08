@@ -1,5 +1,5 @@
-// screens/ArtworkDetailScreen.tsx
-import React, {useState, useEffect, useCallback } from 'react';
+// screens/ArtworkDetailScreen.tsx - FIXED
+import React, {useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -16,12 +16,9 @@ import {
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { CreativeWork, WorkWithContext, User } from '../types/core';
-import { worksService } from '../services/worksService';
-import { socialService } from '../services/socialService'; 
+import { worksService } from '../services/api/works';
 import LikeButton from '../components/LikeButton';
 import { useAuth } from '../context/AuthContext';
-import { mediaUtils } from '../utils/mediaUtils';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { AlertModal } from '../components/AlertModal';
 import ScreenErrorBoundary from '../components/ScreenErrorBoundary';
@@ -29,6 +26,7 @@ import { RemixButton } from '../components/RemixButton';
 import MediaTypeBadge from '../components/MediaTypeBadge';
 import WorkTypeBadge from '../components/WorkTypeBadge';
 import { navigateToProfile } from 'utils/navigation';
+import { useArtworkDetail } from 'hooks/useArtworkDetail';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 
@@ -36,25 +34,39 @@ const ArtworkDetailScreen = ({ route, navigation }: Props) => {
   
   const { user: currentUser } = useAuth();
   const { workId } = route.params as any;
-  const [workContext, setWorkContext] = useState<WorkWithContext | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // Single hook to rule them all!
+  const {
+    work: currentWork,
+    artist,
+    realTimeComments: comments,
+    realTimeLikeCount,
+    realTimeUserHasLiked,
+    collaborations,
+    originalWork,
+    loading,
+    error: detailError,
+    refresh,
+    addComment,
+    deleteComment,
+    toggleLike,
+    isCommentSubmitting,
+    isCommentDeleting,
+    isLikeToggling
+  } = useArtworkDetail(workId, currentUser);
+
   const [newComment, setNewComment] = useState('');
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [realLikeCount, setRealLikeCount] = useState(0);
-  const [userLiked, setUserLiked] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info');
   const [showDeleteArtworkModal, setShowDeleteArtworkModal] = useState(false);
   const [deletingArtwork, setDeletingArtwork] = useState(false);
-  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   
-const isOwner = currentUser?.id === workContext?.work.artistId;
+  const isOwner = currentUser?.id === currentWork?.artistId;
 
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setModalTitle(title);
@@ -82,197 +94,50 @@ const isOwner = currentUser?.id === workContext?.work.artistId;
     }
   };
 
-  // Load comments function
-  const loadComments = async () => {
-    if (!workId) return;
-    try {
-      const workComments = await socialService.getComments(workId);
-      setComments(workComments);
-    } catch (error) {
-      console.error('Error loading comments:', error);
-    }
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-  
-  const loadData = async () => {
-    if (isMounted && workId) {
-      await loadWorkData(workId);
-    }
-  };
-
-  loadData();
-
-  return () => {
-    isMounted = false;
-  };
-}, [workId]);
-
-  const loadWorkData = async (workId: string) => {
-    try {
-      setLoading(true);
-      
-      // Use the new service to get work with full context
-      const work = await worksService.getWorkWithContext(workId);
-      setWorkContext(work);
-      
-      // Load real-time data - any of these could fail
-    try {
-      const [likeCount, workComments, liked] = await Promise.all([
-        socialService.getLikeCount(workId),
-        socialService.getComments(workId),
-        currentUser ? socialService.isLiked(workId, currentUser?.id) : false
-      ]);
-      
-      setRealLikeCount(likeCount);
-      setUserLiked(liked);
-      setComments(workComments);
-    } catch (socialError) {
-      console.warn('⚠️ Social data failed to load:', socialError);
-      // Set defaults but keep the artwork info
-      setRealLikeCount(0);
-      setUserLiked(false);
-      setComments([]);
-    }
-    
-  } catch (error) {
-    console.error('Error loading work data:', error);
-    
-    // Create a more robust fallback
-    const fallbackWork: CreativeWork = {
-      id: workId,
-      title: 'Untitled Artwork',
-      description: 'Could not load artwork details. Please check your connection.',
-      artistId: 'unknown',
-      mediaType: 'line_art',
-      assetUrl: '', 
-      mediaConfig: { isColorable: false, complexity: 'medium' },
-      originalWorkId: undefined,
-      derivationChain: [],
-      metadata: {},
-      tags: [],
-      visibility: 'public',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const fallbackArtist: User = {
-      id: 'unknown',
-      username: 'unknown',
-      displayName: 'Unknown Artist',
-      avatarUrl: undefined,
-      bio: '',
-      roles: ['supporter'],
-      joinedDate: new Date(),
-    };
-
-    setWorkContext({
-      work: fallbackWork,
-      originalWork: undefined,
-      collaborations: [],
-      artist: fallbackArtist,
-      remixes: [],
-      siblings: []
-    });
-    
-    // Show a user-friendly error
-    showAlert('Load Error', 'Could not load artwork details. Some features may be limited.', 'error');
-  } finally {
-    setLoading(false);
-  }
-};
-
-const onRefresh = useCallback(async () => {
-  setRefreshing(true);
-  await loadWorkData(workId);
-  setRefreshing(false);
-}, [workId]);
-
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
 
   const handleAddComment = async () => {
-
-    if (!currentUser || !workContext) return;
+    if (!newComment.trim()) return;
     
-    const commentText = newComment.trim();
-  if (!commentText) return;
-  
-  setSubmittingComment(true);
-  
-  try {
-    // Use the robust service
-    const result = await socialService.addComment(workContext.work.id, commentText);
-    
-    if (result.success && result.data) {
-      // Success - add comment to list
-      setComments(prev => [...prev, result.data!]);
+    const success = await addComment(newComment);
+    if (success) {
       setNewComment('');
       showAlert('Success', 'Comment added successfully', 'success');
     } else {
-      // Service returned an error
-      showAlert('Error', result.error || 'Failed to add comment', 'error');
+      showAlert('Error', 'Failed to add comment', 'error');
     }
-  } catch (error) {
-    // This catches unexpected errors
-    console.error('Unexpected error adding comment:', error);
-    showAlert('Error', 'An unexpected error occurred', 'error');
-  } finally {
-    setSubmittingComment(false);
-  }
-};
+  };
 
   const handleDeleteComment = (commentId: string) => {
     setCommentToDelete(commentId);
     setShowDeleteCommentModal(true);
   };
-  
+
   const confirmDeleteComment = async () => {
     if (!commentToDelete) return;
     
-    setDeletingCommentId(commentToDelete);
-    try {
-      const result = await socialService.deleteComment(commentToDelete);
-      
-      if (result.success) {
-        // Remove from local state
-        setComments(prev => prev.filter(c => c.id !== commentToDelete));
-        showAlert('Success', 'Comment deleted successfully', 'success');
-      } else {
-        showAlert('Error', result.error || 'Failed to delete comment', 'error');
-      }
-    } catch (error) {
-      console.error('❌ Unexpected error deleting comment:', error);
-      showAlert('Error', 'An unexpected error occurred', 'error');
-    } finally {
-      setDeletingCommentId(null);
-      setShowDeleteCommentModal(false);
-      setCommentToDelete(null);
+    const success = await deleteComment(commentToDelete);
+    if (success) {
+      showAlert('Success', 'Comment deleted successfully', 'success');
+    } else {
+      showAlert('Error', 'Failed to delete comment', 'error');
     }
+    
+    setShowDeleteCommentModal(false);
+    setCommentToDelete(null);
   };
 
   const handleLike = async () => {
-    if (!currentUser || !workContext) return;
+    if (!currentUser) return;
     
     try {
-      // Optimistic update
-      setUserLiked(prev => !prev);
-      setRealLikeCount(prev => userLiked ? prev - 1 : prev + 1);
-
-      // Use NEW social service
-      const nowLiked = await socialService.toggleLike(workContext.work.id, currentUser.id);
-      const newLikeCount = await socialService.getLikeCount(workContext.work.id);
-      
-      // Update with actual database state
-      setUserLiked(nowLiked);
-      setRealLikeCount(newLikeCount);
-      
+      await toggleLike(); // ✅ Fixed: No userId parameter needed
     } catch (error) {
-      console.error('Error toggling like:', error);
-      // Revert optimistic update
-      const actualLikeCount = await socialService.getLikeCount(workContext.work.id);
-      const actualLikedState = await socialService.isLiked(workContext.work.id);
-      setRealLikeCount(actualLikeCount);
-      setUserLiked(actualLikedState);
+      showAlert('Error', 'Failed to update like', 'error');
     }
   };
 
@@ -307,7 +172,7 @@ const onRefresh = useCallback(async () => {
     );
   }
 
-  if (loading || !workContext) {
+  if (loading || !currentWork) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -316,10 +181,8 @@ const onRefresh = useCallback(async () => {
     );
   }
 
-  const { work: currentWork, originalWork, collaborations, artist } = workContext;
-
   return (
-    <ScreenErrorBoundary onReset={() => loadWorkData(workId)}>
+    <ScreenErrorBoundary onReset={refresh}>
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -380,28 +243,26 @@ const onRefresh = useCallback(async () => {
           }}
           disabled={!artist?.id}
         >
-  <Text style={[styles.artist, styles.clickableArtist]}>
-    by {artist?.displayName || 'Unknown Artist'}
-  </Text>
-</TouchableOpacity>
+          <Text style={[styles.artist, styles.clickableArtist]}>
+            by {artist?.displayName || 'Unknown Artist'}
+          </Text>
+        </TouchableOpacity>
           
-<View style={styles.badgeContainer}>
-      
-  <MediaTypeBadge 
-    mediaType={currentWork.mediaType}
-    size="medium"
-    variant="default"
-  />
-  
-  <WorkTypeBadge 
-    isOriginal={!currentWork.originalWorkId}
-    size="medium"
-  />
-</View>
+        <View style={styles.badgeContainer}>
+          <MediaTypeBadge 
+            mediaType={currentWork.mediaType}
+            size="medium"
+            variant="default"
+          />
+          <WorkTypeBadge 
+            isOriginal={!currentWork.originalWorkId}
+            size="medium"
+          />
+        </View>
           
-{currentWork.description && (
-  <Text style={styles.description}>{currentWork.description}</Text>
-)}
+        {currentWork.description && (
+          <Text style={styles.description}>{currentWork.description}</Text>
+        )}
           
           {/* Collaboration Chain */}
           {originalWork && (
@@ -418,30 +279,30 @@ const onRefresh = useCallback(async () => {
           {/* Stats */}
           <View style={styles.stats}>
             <LikeButton 
-              isLiked={userLiked}
-              likeCount={realLikeCount}
-              onPress={handleLike}
+              isLiked={realTimeUserHasLiked} // ✅ Fixed: Use correct variable name
+              likeCount={realTimeLikeCount} // ✅ Fixed: Use correct variable name
+              onPress={handleLike} // ✅ Fixed: Use the handler function
               size="medium"
+              disabled={isLikeToggling || !currentUser}
             />
             <Text style={styles.stat}>{comments.length} comments</Text>
             <Text style={styles.stat}>{collaborations.length} derivatives</Text>
           </View>
 
           {/* Action Buttons */}
-          
           <View style={styles.actions}>
-          {isOwner && (
-            <TouchableOpacity 
-              style={styles.deleteButton}
-              onPress={() => setShowDeleteArtworkModal(true)}
-              disabled={deletingArtwork}
-             >
-            {deletingArtwork ? (
-              <ActivityIndicator size="small" color="#ff4444" />
-            ) : (
-              <Text style={styles.deleteButtonText}>🗑️ Delete</Text>
-               )}
-            </TouchableOpacity>
+            {isOwner && (
+              <TouchableOpacity 
+                style={styles.deleteButton}
+                onPress={() => setShowDeleteArtworkModal(true)}
+                disabled={deletingArtwork}
+              >
+                {deletingArtwork ? (
+                  <ActivityIndicator size="small" color="#ff4444" />
+                ) : (
+                  <Text style={styles.deleteButtonText}>🗑️ Delete</Text>
+                )}
+              </TouchableOpacity>
             )}
           
             <RemixButton 
@@ -461,7 +322,9 @@ const onRefresh = useCallback(async () => {
               return (
                 <View key={comment.id} style={styles.comment}>
                   <View style={styles.commentHeader}>
-                    <Text style={styles.commentAuthor}>{comment.userName}</Text>
+                    <Text style={styles.commentAuthor}>
+                      {comment.user?.displayName || comment.userId || 'Anonymous'}
+                    </Text>
                     <Text style={styles.commentDate}>
                       {new Date(comment.createdAt).toLocaleDateString()}
                     </Text>
@@ -469,9 +332,9 @@ const onRefresh = useCallback(async () => {
                       <TouchableOpacity 
                         style={styles.deleteCommentButton}
                         onPress={() => handleDeleteComment(comment.id)}
-                        disabled={deletingCommentId === comment.id}
+                        disabled={isCommentDeleting(comment.id)} // ✅ Fixed: Pass comment.id
                       >
-                        {deletingCommentId === comment.id ? (
+                        {isCommentDeleting(comment.id) ? (
                           <ActivityIndicator size="small" color="#ff4444" />
                         ) : (
                           <Text style={styles.deleteCommentText}>🗑️</Text>
@@ -479,7 +342,9 @@ const onRefresh = useCallback(async () => {
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.commentText}>{comment.text}</Text>
+                  <Text style={styles.commentText}>
+                    {comment.content || comment.content} 
+                  </Text>
                 </View>
               );
             })}
@@ -499,17 +364,17 @@ const onRefresh = useCallback(async () => {
                   onChangeText={setNewComment}
                   placeholder="Share your thoughts..."
                   multiline
-                  editable={!submittingComment}
+                  editable={!isCommentSubmitting} // ✅ Fixed: Use isCommentSubmitting
                 />
                 <TouchableOpacity 
                   style={[
                     styles.postButton,
-                    (!newComment.trim() || submittingComment) && styles.postButtonDisabled
+                    (!newComment.trim() || isCommentSubmitting) && styles.postButtonDisabled
                   ]}
                   onPress={handleAddComment}
-                  disabled={!newComment.trim() || submittingComment}
+                  disabled={!newComment.trim() || isCommentSubmitting}
                 >
-                  {submittingComment ? (
+                  {isCommentSubmitting ? (
                     <ActivityIndicator size="small" color="white" />
                   ) : (
                     <Text style={styles.postButtonText}>Post</Text>
@@ -529,7 +394,7 @@ const onRefresh = useCallback(async () => {
                 Other creations inspired by this work
               </Text>
               {/* Future: derivative gallery */}
-              </View>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -538,6 +403,7 @@ const onRefresh = useCallback(async () => {
   );
 };
 
+// Styles remain the same...
 const styles = StyleSheet.create({
   container: {
     flex: 1,

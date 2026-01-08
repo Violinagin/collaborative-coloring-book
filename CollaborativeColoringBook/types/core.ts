@@ -173,7 +173,7 @@ export interface Like {
   user?: User;
 }
 
-export interface Comment {
+export interface ArtworkComment {
   id: string;
   workId: string;
   userId: string;
@@ -181,6 +181,8 @@ export interface Comment {
   createdAt: Date;
   user?: User;
 }
+
+export type Comment = ArtworkComment;
 
 export const isLineArtConfig = (config: MediaConfig): config is LineArtConfig => {
     return (config as LineArtConfig).isColorable !== undefined;
@@ -224,32 +226,3 @@ export interface BasicMediaConfig {
   [key: string]: any;
 };
 
-export interface DatabaseWork {
-  id: string;
-  title: string;
-  description?: string;
-  asset_url: string;        // snake_case for DB fields
-  media_type: string;
-  artist_id: string;
-  original_work_id?: string;
-  derivation_chain: string[];
-  created_at: string;       // ISO string from DB
-  
-  // Joined tables (as they come from Supabase)
-  artist?: {
-    id: string;
-    username: string;
-    display_name: string;   // snake_case
-    avatar_url?: string;
-  };
-  likes?: Array<{
-    id: string;
-    user_id: string;
-    created_at: string;
-    user: {
-      id: string;
-      username: string;
-      display_name: string;
-    };
-  }>;
-}

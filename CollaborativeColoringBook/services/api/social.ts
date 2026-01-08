@@ -1,18 +1,22 @@
-// services/socialService.ts
-import { getSupabase } from '../lib/supabase';
-
-// ==================== TYPES ====================
-export type SocialResult<T> = {
-  data: T | null;
-  error: string | null;
-  success: boolean;
-};
+// services/api/social.ts
+import { getSupabase } from '../../lib/supabase';
+import { 
+  ApiResponse, 
+  DatabaseLike, 
+  DatabaseComment,
+  ArtworkComment 
+} from '../../types';
+import { 
+  transformDatabaseComment, 
+  transformDatabaseLike,
+  groupLikesByWorkId 
+} from '../../utils/transformers';
 
 // ==================== SAFE QUERY WRAPPER ====================
 async function safeSocialQuery<T>(
   operation: () => Promise<T>,
   operationName: string
-): Promise<SocialResult<T>> {
+): Promise<ApiResponse<T>> {
   try {
     const data = await operation();
     return { data, error: null, success: true };
@@ -114,41 +118,27 @@ export const socialService = {
   
   // ✅ COMMENTS ========================================
   
-  async getComments(workId: string): Promise<any[]> {
+  async getComments(workId: string): Promise<ArtworkComment[]> {
     const result = await safeSocialQuery(async () => {
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from('comments')
         .select(`
           *,
-          user:users(id, username, display_name, avatar_url)
+          user:users(id, username, display_name, avatar_url, bio, roles, created_at)
         `)
         .eq('work_id', workId)
         .order('created_at', { ascending: true });
       
       if (error) throw error;
       
-      // Transform to your expected format
-      return (data || []).map((comment: any) => ({
-        id: comment.id,
-        workId: comment.work_id,
-        userId: comment.user_id,
-        text: comment.text,
-        createdAt: new Date(comment.created_at),
-        userName: comment.user?.display_name || comment.user?.username || 'Anonymous',
-        user: comment.user ? {
-          id: comment.user.id,
-          username: comment.user.username,
-          displayName: comment.user.display_name,
-          avatarUrl: comment.user.avatar_url
-        } : undefined
-      }));
+      return (data || []).map(transformDatabaseComment);
     }, 'getComments');
     
     return result.data ?? [];
   },
   
-  async addComment(workId: string, text: string): Promise<SocialResult<any>> {
+  async addComment(workId: string, content: string): Promise<ApiResponse<ArtworkComment>> {
     return safeSocialQuery(async () => {
       const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
@@ -157,7 +147,7 @@ export const socialService = {
       }
       
       // Validation
-      const trimmedText = text.trim();
+      const trimmedText = content.trim();
       if (!trimmedText) {
         throw new Error('Comment cannot be empty');
       }
@@ -170,35 +160,22 @@ export const socialService = {
         .insert({
           work_id: workId,
           user_id: userData.user.id,
-          text: trimmedText
+          text: trimmedText  // Database uses 'text' column
         })
         .select(`
           *,
-          user:users(id, username, display_name, avatar_url)
+          user:users(id, username, display_name, avatar_url, bio, roles, created_at)
         `)
         .single();
       
       if (error) throw error;
       
-      // Return in your expected format
-      return {
-        id: data.id,
-        workId: data.work_id,
-        userId: data.user_id,
-        text: data.text,
-        createdAt: new Date(data.created_at),
-        userName: data.user?.display_name || data.user?.username || 'Anonymous',
-        user: data.user ? {
-          id: data.user.id,
-          username: data.user.username,
-          displayName: data.user.display_name,
-          avatarUrl: data.user.avatar_url
-        } : undefined
-      };
+      // Use transformer
+      return transformDatabaseComment(data);
     }, 'addComment');
   },
   
-  async deleteComment(commentId: string): Promise<SocialResult<void>> {
+  async deleteComment(commentId: string): Promise<ApiResponse<void>> {
     return safeSocialQuery(async () => {
       const supabase = getSupabase();
       const { data: userData } = await supabase.auth.getUser();
@@ -229,7 +206,7 @@ export const socialService = {
   
   // ✅ FOLLOWS =========================================
   
-  async followUser(followerId: string, followingId: string): Promise<SocialResult<boolean>> {
+  async followUser(followerId: string, followingId: string): Promise<ApiResponse<boolean>> {
     return safeSocialQuery(async () => {
       if (followerId === followingId) {
         throw new Error('Cannot follow yourself');
@@ -254,7 +231,7 @@ export const socialService = {
     }, 'followUser');
   },
   
-  async unfollowUser(followerId: string, followingId: string): Promise<SocialResult<boolean>> {
+  async unfollowUser(followerId: string, followingId: string): Promise<ApiResponse<boolean>> {
     return safeSocialQuery(async () => {
       const supabase = getSupabase();
       const { error } = await supabase
@@ -313,5 +290,170 @@ export const socialService = {
     }, 'getFollowingCount');
     
     return result.data ?? 0;
+  },
+
+  // ✅ Batch get like counts for multiple works
+async batchGetLikeCounts(workIds: string[]): Promise<Record<string, number>> {
+  if (workIds.length === 0) return {};
+  
+  const result = await safeSocialQuery(async () => {
+    const supabase = getSupabase();
+    
+    // Get all likes for these works in ONE query
+    const { data, error } = await supabase
+      .from('likes')
+      .select('work_id')
+      .in('work_id', workIds);
+    
+    if (error) throw error;
+    
+    // Count likes per work
+    const counts: Record<string, number> = {};
+    (data as DatabaseLike[] || []).forEach((like: DatabaseLike) => {
+      counts[like.work_id] = (counts[like.work_id] || 0) + 1;
+    });
+    
+    // Ensure all workIds are in the result (even with 0 likes)
+    workIds.forEach(id => {
+      if (!(id in counts)) {
+        counts[id] = 0;
+      }
+    });
+    
+    return counts;
+  }, 'batchGetLikeCounts');
+  
+  return result.data || {};
+},
+
+async batchGetLikes(workIds: string[]): Promise<Record<string, any[]>> {
+  if (workIds.length === 0) return {};
+  
+  const result = await safeSocialQuery(async () => {
+    const supabase = getSupabase();
+    
+    const { data, error } = await supabase
+      .from('likes')
+      .select(`
+        *,
+        user:users(id, username, display_name, avatar_url)
+      `)
+      .in('work_id', workIds);
+    
+    if (error) throw error;
+    
+    const grouped = groupLikesByWorkId(data as DatabaseLike[] || []);
+    
+    // Transform each group
+    const transformed: Record<string, any[]> = {};
+    Object.keys(grouped).forEach(workId => {
+      transformed[workId] = grouped[workId].map(transformDatabaseLike);
+    });
+    
+    return transformed;
+  }, 'batchGetLikes');
+  
+  return result.data || {};
+},
+
+// ✅ Batch get comments with user data
+async batchGetComments(workIds: string[]): Promise<Record<string, any[]>> {
+  if (workIds.length === 0) return {};
+  
+  const result = await safeSocialQuery(async () => {
+    const supabase = getSupabase();
+    
+    const { data, error } = await supabase
+      .from('comments')
+      .select(`
+        *,
+        user:users(id, username, display_name, avatar_url)
+      `)
+      .in('work_id', workIds);
+    
+    if (error) throw error;
+    
+    const grouped: Record<string, any[]> = {};
+    (data || []).forEach((comment: any) => {
+      if (!grouped[comment.work_id]) {
+        grouped[comment.work_id] = [];
+      }
+      grouped[comment.work_id].push(comment);
+    });
+    
+    return grouped;
+  }, 'batchGetComments');
+  
+  return result.data || {};
+},
+
+// ✅ Batch get comment counts for multiple works
+async batchGetCommentCounts(workIds: string[]): Promise<Record<string, number>> {
+  if (workIds.length === 0) return {};
+  
+  const result = await safeSocialQuery(async () => {
+    const supabase = getSupabase();
+    
+    const { data, error } = await supabase
+      .from('comments')
+      .select('work_id')
+      .in('work_id', workIds);
+    
+    if (error) throw error;
+    
+    const counts: Record<string, number> = {};
+    (data as DatabaseComment[] || []).forEach((comment: DatabaseComment) => {
+      counts[comment.work_id] = (counts[comment.work_id] || 0) + 1;
+    });
+    
+    // Ensure all workIds are in the result
+    workIds.forEach(id => {
+      if (!(id in counts)) {
+        counts[id] = 0;
+      }
+    });
+    
+    return counts;
+  }, 'batchGetCommentCounts');
+  
+  return result.data || {};
+},
+
+// ✅ Batch check if user liked multiple works
+async batchIsLiked(workIds: string[], userId?: string): Promise<Record<string, boolean>> {
+  // Always initialize with all false
+  const initialResults: Record<string, boolean> = {};
+  workIds.forEach(id => initialResults[id] = false);
+  
+  if (workIds.length === 0 || !userId) {
+    return initialResults; // Already all false
   }
+  
+  const result = await safeSocialQuery(async () => {
+    const supabase = getSupabase();
+    
+    const { data, error } = await supabase
+      .from('likes')
+      .select('work_id')
+      .in('work_id', workIds)
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    
+    // Create a copy to avoid mutation issues
+    const results = { ...initialResults };
+    
+    // Mark liked works as true
+    (data || []).forEach((like: any) => {
+      if (like.work_id in results) {
+        results[like.work_id] = true;
+      }
+    });
+    
+    return results;
+  }, 'batchIsLiked');
+  
+  return result.data || initialResults; // Return fallback results if query fails
+},
+
 };

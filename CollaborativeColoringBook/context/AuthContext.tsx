@@ -3,9 +3,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { getSupabase } from '../lib/supabase';
 import { User } from '../types/core';
 import { initializeAuth, storeAuthSession, clearAuthSession } from '../services/authService';
-import { userService } from '../services/userService';
+import { userService } from '../services/api/users';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
-
 
 type AuthContextType = {
   user: User | null;
@@ -15,6 +14,8 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: () => Promise<void>;
+  refreshUserWithSocial: () => Promise<void>; // ✅ NEW: For profile page
+  loadLeanUserProfile: () => Promise<void>;    // ✅ NEW: For edit profile screen
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,6 +47,45 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       await loadUserProfile(session.user.id);
+    }
+  };
+
+  // ✅ NEW: Refresh with social data (for profile page)
+  const refreshUserWithSocial = async () => {
+    const supabase = getSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadUserProfile(session.user.id); // Use the full profile loader
+    }
+  };
+
+  // ✅ NEW: Load lean profile (no social data)
+  const loadLeanUserProfile = async (userId: string) => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Use getProfile instead of getUser for better performance
+      const userProfile = await userService.getProfile(userId); // ✅ Lean version
+      setUser(userProfile);
+    } catch (error) {
+      console.error('❌ Error in loadLeanUserProfile:', error);
+      // Always create a fallback user
+      const fallbackUser: User = {
+        id: userId,
+        username: `user_${userId.slice(0, 8)}`,
+        displayName: 'New User',
+        avatarUrl: undefined,
+        bio: undefined,
+        roles: ['supporter'],
+        joinedDate: new Date(),
+      };
+      setUser(fallbackUser);
+    } finally {
+      // CRITICAL: Always set loading to false
+      setLoading(false);
     }
   };
 
@@ -95,6 +135,7 @@ const subscription = listenerData.subscription;
     initializeAuthState();
   
   }, []);
+
   const loadUserProfile = async (userId: string) => {
     
     if (!userId) {
@@ -123,7 +164,65 @@ const subscription = listenerData.subscription;
         setLoading(false);
       }
     };
+
+  //  Public method for edit profile screen
+  const loadLeanUserProfilePublic = async () => {
+    const supabase = getSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadLeanUserProfile(session.user.id);
+    }
+  };
+
+  useEffect(() => {
+    const initializeAuthState = async () => {
+      try {
+        // 1. First, initialize auth from storage
+        const storedAuth = await initializeAuth();
   
+        // 2. THEN get the current session
+        const supabase = getSupabase();
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        setSession(session);
+        if (session?.user) {
+          // ✅ Use lean profile for initial load (faster)
+          await loadLeanUserProfile(session.user.id);
+        } else {
+          setLoading(false);
+        }
+  
+        // 3. Set up auth state change listener
+        
+        const { data: listenerData } = supabase.auth.onAuthStateChange(
+          async (event: AuthChangeEvent, session: Session | null) => {
+            setSession(session);
+            if (session?.user) {
+              // ✅ Use lean profile for auth changes (faster)
+              await loadLeanUserProfile(session.user.id);
+              await storeAuthSession(session);
+            } else {
+              setUser(null);
+              setLoading(false);
+              await clearAuthSession();
+            }
+          }
+        );
+        
+        const subscription = listenerData.subscription;
+  
+        return () => subscription.unsubscribe();
+  
+      } catch (error) {
+        console.error('❌ Error in auth initialization:', error);
+        setLoading(false);
+      }
+    };
+  
+    // Call the complete initialization
+    initializeAuthState();
+  
+  }, []);
 
   const signUp = async (email: string, password: string, username: string, displayName: string) => {
     const supabase = getSupabase();
@@ -203,7 +302,9 @@ const subscription = listenerData.subscription;
       signUp,
       signIn,
       signOut,
-      updateUser,
+      updateUser, // ✅ For edit profile
+      refreshUserWithSocial, // ✅ For profile page (full)
+      loadLeanUserProfile: loadLeanUserProfilePublic,
     }}>
       {children}
     </AuthContext.Provider>

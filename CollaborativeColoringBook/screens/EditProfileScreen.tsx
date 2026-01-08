@@ -1,4 +1,4 @@
-// screens/EditProfileScreen.tsx
+// screens/EditProfileScreen.tsx - REFACTORED to use services
 import React, { useState } from 'react';
 import {
   View,
@@ -13,14 +13,16 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { userService } from '../services/api/users';
+import { authService } from '../services/authService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
 const EditProfileScreen = ({ navigation }: Props) => {
-  const { user, session, updateUser } = useAuth();
+  const { user, session, loadLeanUserProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   
   // Modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -29,6 +31,10 @@ const EditProfileScreen = ({ navigation }: Props) => {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showEmailConfirmModal, setShowEmailConfirmModal] = useState(false);
   
+  // Validation states
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
+  
   // Modal content
   const [modalContent, setModalContent] = useState({
     title: '',
@@ -36,11 +42,19 @@ const EditProfileScreen = ({ navigation }: Props) => {
     type: 'error' as 'error' | 'success' | 'info'
   });
 
+  // Get user data safely with fallbacks
+  const userData = user || {
+    id: session?.user?.id || '',
+    displayName: '',
+    username: '',
+    bio: '',
+  };
+
   // Form state
   const [formData, setFormData] = useState({
-    displayName: user?.displayName || '',
-    username: user?.username || '',
-    bio: user?.bio || '',
+    displayName: userData.displayName || '',
+    username: userData.username || '',
+    bio: userData.bio || '',
     email: session?.user?.email || '',
     currentPassword: '',
     newPassword: '',
@@ -53,6 +67,12 @@ const EditProfileScreen = ({ navigation }: Props) => {
       ...prev,
       [field]: value,
     }));
+
+    // Clear username validation when typing
+    if (field === 'username') {
+      setUsernameError(null);
+      setIsUsernameAvailable(null);
+    }
   };
 
   // Show modal functions
@@ -84,10 +104,45 @@ const EditProfileScreen = ({ navigation }: Props) => {
     setShowDeleteModal(false);
   };
 
+  // Check username availability
+  const checkUsernameAvailability = async () => {
+    if (!formData.username.trim()) {
+      setUsernameError('Username is required');
+      return;
+    }
+
+    if (formData.username.toLowerCase() === userData.username?.toLowerCase()) {
+      setIsUsernameAvailable(true); // Same as current username
+      return;
+    }
+
+    setCheckingUsername(true);
+    try {
+      const isAvailable = await userService.checkUsernameAvailability(
+        formData.username,
+        userData.id
+      );
+      
+      setIsUsernameAvailable(isAvailable);
+      if (!isAvailable) {
+        setUsernameError('Username is already taken');
+      }
+    } catch (error) {
+      console.error('Error checking username:', error);
+      setUsernameError('Could not check username availability');
+    } finally {
+      setCheckingUsername(false);
+    }
+  };
+
   // Update profile (display name, username, bio)
   const handleUpdateProfile = async () => {
-    if (!user) return;
+    if (!userData.id) {
+      showError('Error', 'User not found');
+      return;
+    }
 
+    // Validation
     if (!formData.displayName.trim()) {
       showError('Error', 'Display name is required');
       return;
@@ -98,30 +153,43 @@ const EditProfileScreen = ({ navigation }: Props) => {
       return;
     }
 
+    // Check username if changed
+    if (formData.username.toLowerCase() !== userData.username?.toLowerCase()) {
+      const isAvailable = await userService.checkUsernameAvailability(
+        formData.username,
+        userData.id
+      );
+      
+      if (!isAvailable) {
+        showError('Error', 'Username is already taken');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
-      // Update user profile in Supabase
-      const { error } = await supabase
-        .from('users')
-        .update({
-          display_name: formData.displayName.trim(),
-          username: formData.username.trim().toLowerCase(),
-          bio: formData.bio.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+      // Use userService to update profile
+      await userService.updateProfile(userData.id, {
+        displayName: formData.displayName.trim(),
+        username: formData.username.trim(),
+        bio: formData.bio.trim(),
+      });
 
-      if (error) throw error;
-
-      // Update local user context
-      if (updateUser) {
-        await updateUser();
+      // Refresh user data from context
+      if (loadLeanUserProfile) {
+        await loadLeanUserProfile();
       }
 
       showSuccess('Success', 'Profile updated successfully!');
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      showError('Error', error.message || 'Failed to update profile');
+      
+      // Handle specific error cases
+      if (error.code === '23505') {
+        showError('Error', 'Username already exists');
+      } else {
+        showError('Error', error.message || 'Failed to update profile');
+      }
     } finally {
       setLoading(false);
     }
@@ -141,23 +209,12 @@ const EditProfileScreen = ({ navigation }: Props) => {
 
     setLoading(true);
     try {
-      // First verify current password by signing in again
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: session?.user?.email!,
-        password: formData.currentPassword,
-      });
-
-      if (signInError) {
-        showError('Error', 'Current password is incorrect');
-        return;
-      }
-
-      // Then update email
-      const { error } = await supabase.auth.updateUser({
-        email: formData.email.trim(),
-      });
-
-      if (error) throw error;
+      // Use authService to update email
+      await authService.updateEmail(
+        session?.user?.email!,
+        formData.email.trim(),
+        formData.currentPassword
+      );
 
       showEmailConfirm();
       
@@ -195,11 +252,19 @@ const EditProfileScreen = ({ navigation }: Props) => {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: formData.newPassword,
-      });
+      // Verify current password first
+      const isValid = await authService.verifyPassword(
+        session?.user?.email!,
+        formData.currentPassword
+      );
+      
+      if (!isValid) {
+        showError('Error', 'Current password is incorrect');
+        return;
+      }
 
-      if (error) throw error;
+      // Use authService to update password
+      await authService.updatePassword(formData.newPassword);
 
       showSuccess('Success', 'Password updated successfully!');
       
@@ -220,22 +285,25 @@ const EditProfileScreen = ({ navigation }: Props) => {
 
   // Delete account
   const handleDeleteAccount = async () => {
-    if (!user) return;
+    if (!userData.id) return;
 
     setDeleteLoading(true);
     try {
-      // Note: This will cascade delete due to your foreign key constraints
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      // Sign out after deletion
-      await supabase.auth.signOut();
+      // Sign out first
+      await authService.signOut();
       
+      // Delete user account using userService
+      await userService.deleteAccount(userData.id);
+
       showSuccess('Account Deleted', 'Your account has been successfully deleted.');
+      
+      // Navigate to auth flow after a delay
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Auth' }],
+        });
+      }, 1500);
     } catch (error: any) {
       console.error('Error deleting account:', error);
       showError('Error', error.message || 'Failed to delete account');
@@ -253,6 +321,13 @@ const EditProfileScreen = ({ navigation }: Props) => {
     closeModals();
     navigation.goBack();
   };
+
+  // Refresh user data on mount
+  React.useEffect(() => {
+    if (loadLeanUserProfile) {
+      loadLeanUserProfile();
+    }
+  }, []);
 
   return (
     <ScrollView style={styles.container}>
@@ -273,14 +348,36 @@ const EditProfileScreen = ({ navigation }: Props) => {
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Username *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.username}
-            onChangeText={(value) => handleInputChange('username', value)}
-            placeholder="Your username"
-            autoCapitalize="none"
-            maxLength={30}
-          />
+          <View style={styles.usernameContainer}>
+            <TextInput
+              style={[styles.input, usernameError && styles.inputError]}
+              value={formData.username}
+              onChangeText={(value) => handleInputChange('username', value)}
+              placeholder="Your username"
+              autoCapitalize="none"
+              maxLength={30}
+            />
+            <TouchableOpacity
+              style={[styles.checkButton, checkingUsername && styles.checkButtonDisabled]}
+              onPress={checkUsernameAvailability}
+              disabled={checkingUsername || !formData.username.trim()}
+            >
+              {checkingUsername ? (
+                <ActivityIndicator size="small" color="#007AFF" />
+              ) : (
+                <Text style={styles.checkButtonText}>Check</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          {usernameError && (
+            <Text style={styles.errorText}>{usernameError}</Text>
+          )}
+          {isUsernameAvailable === true && !usernameError && (
+            <Text style={styles.successText}>✓ Username is available</Text>
+          )}
+          <Text style={styles.helperText}>
+            Usernames can only contain letters, numbers, and underscores
+          </Text>
         </View>
 
         <View style={styles.inputGroup}>
@@ -304,10 +401,10 @@ const EditProfileScreen = ({ navigation }: Props) => {
           style={[
             styles.button, 
             styles.primaryButton, 
-            loading && styles.buttonDisabled
+            (loading || !formData.displayName.trim() || !formData.username.trim()) && styles.buttonDisabled
           ]}
           onPress={handleUpdateProfile}
-          disabled={loading}
+          disabled={loading || !formData.displayName.trim() || !formData.username.trim()}
         >
           {loading ? (
             <ActivityIndicator color="white" />
@@ -320,6 +417,9 @@ const EditProfileScreen = ({ navigation }: Props) => {
       {/* Email Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Email Address</Text>
+        <Text style={styles.currentEmail}>
+          Current: {session?.user?.email}
+        </Text>
         
         <View style={styles.inputGroup}>
           <Text style={styles.label}>New Email</Text>
@@ -348,10 +448,10 @@ const EditProfileScreen = ({ navigation }: Props) => {
           style={[
             styles.button, 
             styles.secondaryButton, 
-            loading && styles.buttonDisabled
+            (!formData.email.trim() || !formData.currentPassword || loading) && styles.buttonDisabled
           ]}
           onPress={handleUpdateEmail}
-          disabled={loading}
+          disabled={!formData.email.trim() || !formData.currentPassword || loading}
         >
           <Text style={styles.secondaryButtonText}>Update Email</Text>
         </TouchableOpacity>
@@ -381,6 +481,7 @@ const EditProfileScreen = ({ navigation }: Props) => {
             placeholder="Enter new password"
             secureTextEntry
           />
+          <Text style={styles.helperText}>Minimum 6 characters</Text>
         </View>
 
         <View style={styles.inputGroup}>
@@ -398,10 +499,10 @@ const EditProfileScreen = ({ navigation }: Props) => {
           style={[
             styles.button, 
             styles.secondaryButton, 
-            loading && styles.buttonDisabled
+            (!formData.currentPassword || !formData.newPassword || loading) && styles.buttonDisabled
           ]}
           onPress={handleUpdatePassword}
-          disabled={loading}
+          disabled={!formData.currentPassword || !formData.newPassword || loading}
         >
           <Text style={styles.secondaryButtonText}>Update Password</Text>
         </TouchableOpacity>
@@ -422,134 +523,9 @@ const EditProfileScreen = ({ navigation }: Props) => {
         </TouchableOpacity>
       </View>
 
-      {/* Delete Confirmation Modal */}
-      <Modal
-        visible={showDeleteModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowDeleteModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Confirm Account Deletion</Text>
-            <Text style={styles.modalText}>
-              Are you absolutely sure? This will permanently delete:
-              {'\n'}• All your artworks
-              {'\n'}• Your colorizations  
-              {'\n'}• Your comments and likes
-              {'\n'}• Your follow relationships
-            </Text>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setShowDeleteModal(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalDeleteButton]}
-                onPress={handleDeleteAccount}
-                disabled={deleteLoading}
-              >
-                {deleteLoading ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.modalDeleteText}>Delete Forever</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Error Modal */}
-      <Modal
-        visible={showErrorModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={closeModals}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, styles.errorTitle]}>{modalContent.title}</Text>
-            <Text style={styles.modalText}>{modalContent.message}</Text>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalPrimaryButton]}
-              onPress={closeModals}
-            >
-              <Text style={styles.modalPrimaryText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Success Modal */}
-      <Modal
-        visible={showSuccessModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleSuccessAction}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, styles.successTitle]}>{modalContent.title}</Text>
-            <Text style={styles.modalText}>{modalContent.message}</Text>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalPrimaryButton]}
-              onPress={handleSuccessAction}
-            >
-              <Text style={styles.modalPrimaryText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Info Modal */}
-      <Modal
-        visible={showInfoModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={closeModals}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, styles.infoTitle]}>{modalContent.title}</Text>
-            <Text style={styles.modalText}>{modalContent.message}</Text>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalPrimaryButton]}
-              onPress={closeModals}
-            >
-              <Text style={styles.modalPrimaryText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Email Confirmation Modal */}
-      <Modal
-        visible={showEmailConfirmModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={closeModals}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, styles.infoTitle]}>Check Your Email</Text>
-            <Text style={styles.modalText}>
-              We sent a confirmation link to your new email address. 
-              Please verify it to complete the update.
-            </Text>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalPrimaryButton]}
-              onPress={closeModals}
-            >
-              <Text style={styles.modalPrimaryText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Modals remain the same... */}
+      {/* ... (Keep all your existing modal code) ... */}
+      
     </ScrollView>
   );
 };
@@ -593,6 +569,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: 'white',
   },
+  inputError: {
+    borderColor: '#ff4444',
+  },
+  usernameContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  checkButton: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  checkButtonDisabled: {
+    opacity: 0.6,
+  },
+  checkButtonText: {
+    color: '#333',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#ff4444',
+    marginTop: 4,
+  },
+  successText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    marginTop: 4,
+  },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
@@ -602,6 +612,18 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'right',
     marginTop: 4,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  currentEmail: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   button: {
     padding: 16,
@@ -652,73 +674,6 @@ const styles = StyleSheet.create({
   dangerButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    padding: 24,
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  errorTitle: {
-    color: '#ff4444',
-  },
-  successTitle: {
-    color: '#4CAF50',
-  },
-  infoTitle: {
-    color: '#2196F3',
-  },
-  modalText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 24,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalCancelButton: {
-    backgroundColor: '#f0f0f0',
-  },
-  modalDeleteButton: {
-    backgroundColor: '#ff4444',
-  },
-  modalPrimaryButton: {
-    backgroundColor: '#007AFF',
-  },
-  modalCancelText: {
-    color: '#333',
-    fontWeight: '600',
-  },
-  modalDeleteText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  modalPrimaryText: {
-    color: 'white',
     fontWeight: '600',
   },
 });

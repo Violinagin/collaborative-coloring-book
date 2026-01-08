@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
   FlatList, 
@@ -8,26 +8,23 @@ import {
   Modal,
   ScrollView,
   Dimensions,
-  
 } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useFocusEffect } from '@react-navigation/native';
-import { worksService } from '../services/worksService';
-import { socialService } from '../services/socialService';
+import { worksService } from '../services/api/works';
+import { socialService } from '../services/api/social';
 import { CreativeWork, MediaType } from '../types/core';
 import { mediaUtils } from '../utils/mediaUtils';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { HeartButton } from '../components/shared/HeartButton';
 import { ThemedText } from '../components/shared/ThemedText';
 import { Icons } from '../components/shared/Icon';
-import { navigateToProfile, navigateToAuth, navigateToUpload } from '../utils/navigation';
+import { navigateToAuth, navigateToUpload } from '../utils/navigation'; // IMPORT BOTH
 import { WorkCard } from '../components/shared/WorkCard';
 import { WorkCardSkeleton } from '../components/WorkCardSkeleton';
 import { GalleryEmptyState } from '../components/GalleryEmptyState';
 import { GalleryScreenProps } from '../types/navigation';
-
 
 const { width } = Dimensions.get('window');
 
@@ -50,50 +47,30 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   const [filteredWorks, setFilteredWorks] = useState<CreativeWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [likeData, setLikeData] = useState<{[workId: string]: {count: number, isLiked: boolean}}>({});
-  const [commentData, setCommentData] = useState<{[workId: string]: number}>({});
   
   // Filtering state
   const [selectedMediaTypes, setSelectedMediaTypes] = useState<MediaType[]>(ALL_MEDIA_TYPES);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'trending'>('recent');
-  
-  // Debug handler
-  const handleUploadPress = useCallback(() => {
-    console.log('Upload FAB pressed');
-    
-    if (!user) {
-      navigateToAuth;
-      return;
-    }
-    
-    // Use type assertion to bypass TypeScript
-    try {
-      (navigation as any).navigate('UploadTab');
-      console.log('✅ Navigated to UploadTab');
-    } catch (error) {
-      console.error('Failed to navigate:', error);
-      
-      // Fallback to Upload screen
-      try {
-        navigateToUpload;
-        console.log('✅ Fallback: Navigated to Upload screen');
-      } catch (error2) {
-        console.error('All navigation failed:', error2);
-      }
-    }
-  }, [navigation, user]);
 
-  useFocusEffect(
-    useCallback(() => {
-      const params = route.params as { showFilterModal?: boolean };
-      if (params?.showFilterModal) {
-        setShowFilterModal(true);
-        // Clear the param after showing modal
-        navigation.setParams({ showFilterModal: undefined });
-      }
-    }, [route.params, navigation])
-  );
+  // Navigation handlers
+  const handleNavigateToAuth = useCallback(() => {
+    // Use your existing navigateToAuth function
+    navigateToAuth(navigation);
+  }, [navigation]);
+
+  const handleNavigateToUpload = useCallback(() => {
+    if (!user) {
+      handleNavigateToAuth();
+    } else {
+      // Call your existing navigateToUpload function
+      navigateToUpload(navigation, user, {
+        originalWorkId: undefined,
+        originalWorkTitle: undefined,
+        originalWork: undefined
+      });
+    }
+  }, [user, navigation, handleNavigateToAuth]);
 
   // Load works on focus
   useEffect(() => {
@@ -105,10 +82,14 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   const loadWorks = async () => {
     try {
       setLoading(true);
+      
+      // Use the optimized getAllWorks function
       const allWorks = await worksService.getAllWorks();
       setWorks(allWorks);
+      
+      // Apply initial filters
       applyFilters(allWorks, selectedMediaTypes, sortBy);
-      await loadSocialData(allWorks);
+      
     } catch (error) {
       console.error('Error loading works:', error);
     } finally {
@@ -117,67 +98,35 @@ const GalleryScreen = ({ navigation, route }: Props) => {
     }
   };
 
-  const loadSocialData = async (worksToLoad: CreativeWork[]) => {
-    const likeData: {[workId: string]: {count: number, isLiked: boolean}} = {};
-    const commentData: {[workId: string]: number} = {};
-      
-    const dataPromises = worksToLoad.map(async (work) => {
-      const [likeCount, workComments, isLiked] = await Promise.all([
-        socialService.getLikeCount(work.id),        
-        socialService.getComments(work.id),         
-        user ? socialService.isLiked(work.id, user.id) : false
-      ]);
-        
-      return { 
-        workId: work.id, 
-        likeCount, 
-        commentCount: workComments.length,
-        isLiked 
-      };
-    });
-      
-    const results = await Promise.all(dataPromises);
-      
-    results.forEach(result => {
-      likeData[result.workId] = {
-        count: result.likeCount,
-        isLiked: result.isLiked
-      };
-      commentData[result.workId] = result.commentCount;
-    });
-      
-    setLikeData(likeData);
-    setCommentData(commentData);
-  };
-
   const applyFilters = (worksList: CreativeWork[], mediaTypes: MediaType[], sortMethod: string) => {
     let filtered = worksList;
     
+    // Filter by media type
     if (mediaTypes.length < ALL_MEDIA_TYPES.length) {
       filtered = filtered.filter(work => mediaTypes.includes(work.mediaType));
     }
     
-    switch (sortMethod) {
-      case 'recent':
-        filtered = [...filtered].sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        break;
-        
-      case 'popular':
-        filtered = [...filtered].sort((a, b) => {
-          const likesA = likeData[a.id]?.count || 0;
-          const likesB = likeData[b.id]?.count || 0;
+    // Sort works
+    filtered = [...filtered].sort((a, b) => {
+      switch (sortMethod) {
+        case 'recent':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          
+        case 'popular':
+          const likesA = a.likes?.length || 0;
+          const likesB = b.likes?.length || 0;
           return likesB - likesA;
-        });
-        break;
-        
-      case 'trending':
-        filtered = [...filtered].sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        break;
-    }
+          
+        case 'trending':
+          // Simple trending: recent works with high engagement
+          const scoreA = (a.likes?.length || 0) + (a.comments?.length || 0);
+          const scoreB = (b.likes?.length || 0) + (b.comments?.length || 0);
+          return scoreB - scoreA;
+          
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
     
     setFilteredWorks(filtered);
   };
@@ -202,6 +151,11 @@ const GalleryScreen = ({ navigation, route }: Props) => {
     applyFilters(works, [], sortBy);
   };
 
+  const handleSortChange = (option: 'recent' | 'popular' | 'trending') => {
+    setSortBy(option);
+    applyFilters(works, selectedMediaTypes, option);
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
     loadWorks();
@@ -209,53 +163,144 @@ const GalleryScreen = ({ navigation, route }: Props) => {
 
   const handleLike = async (workId: string) => {
     if (!user) {
-      navigateToAuth;
+      handleNavigateToAuth();
       return;
     }
     
-    const currentLikeState = likeData[workId]?.isLiked || false;
-    const currentCount = likeData[workId]?.count || 0;
+    const work = works.find(w => w.id === workId);
+    if (!work) return;
+    
+    const currentLikeState = work.userHasLiked || false;
+    const currentCount = work.likes?.length || 0;
     
     // Optimistic update
-    setLikeData(prev => ({
-      ...prev,
-      [workId]: {
-        count: currentLikeState ? currentCount - 1 : currentCount + 1,
-        isLiked: !currentLikeState
+    setWorks(prev => prev.map(work => {
+      if (work.id === workId) {
+        return {
+          ...work,
+          userHasLiked: !currentLikeState,
+          likes: currentLikeState 
+            ? (work.likes || []).filter(like => like.userId !== user.id)
+            : [...(work.likes || []), {
+              id: `temp_${Date.now()}`,
+              workId,
+              userId: user.id,
+              createdAt: new Date(),
+              user: user
+            }]
+        };
       }
+      return work;
     }));
-  
+    
+    // Re-apply filters
+    applyFilters(
+      works.map(w => w.id === workId ? {
+        ...w,
+        userHasLiked: !currentLikeState,
+        likes: currentLikeState 
+          ? (w.likes || []).filter(like => like.userId !== user.id)
+          : [...(w.likes || []), {
+            id: `temp_${Date.now()}`,
+            workId,
+            userId: user.id,
+            createdAt: new Date(),
+            user: user
+          }]
+      } : w),
+      selectedMediaTypes,
+      sortBy
+    );
+    
     try {
-      const nowLiked = await socialService.toggleLike(workId, user.id);
-      const newLikeCount = await socialService.getLikeCount(workId);
+      // Use socialService.toggleLike
+      const newLikeState = await socialService.toggleLike(workId, user.id);
       
-      // Sync with server
-      setLikeData(prev => ({
-        ...prev,
-        [workId]: {
-          count: newLikeCount,
-          isLiked: nowLiked
+      // Fetch updated counts
+      const [actualLikeCount, actualUserLiked] = await Promise.all([
+        socialService.getLikeCount(workId),
+        socialService.isLiked(workId, user.id)
+      ]);
+      
+      // Update with server response
+      setWorks(prev => prev.map(work => {
+        if (work.id === workId) {
+          return {
+            ...work,
+            userHasLiked: actualUserLiked,
+            likes: actualUserLiked 
+              ? [...(work.likes || []).filter(l => l.userId !== user.id), {
+                  id: `server_${Date.now()}`,
+                  workId,
+                  userId: user.id,
+                  createdAt: new Date(),
+                  user: user
+                }]
+              : (work.likes || []).filter(l => l.userId !== user.id)
+          };
         }
+        return work;
       }));
+      
+      // Re-apply filters with server data
+      applyFilters(
+        works.map(w => w.id === workId ? {
+          ...w,
+          userHasLiked: actualUserLiked,
+          likes: actualUserLiked 
+            ? [...(w.likes || []).filter(l => l.userId !== user.id), {
+                id: `server_${Date.now()}`,
+                workId,
+                userId: user.id,
+                createdAt: new Date(),
+                user: user
+              }]
+            : (w.likes || []).filter(l => l.userId !== user.id)
+        } : w),
+        selectedMediaTypes,
+        sortBy
+      );
       
     } catch (error) {
       console.error('Error toggling like:', error);
-      // Rollback
-      setLikeData(prev => ({
-        ...prev,
-        [workId]: {
-          count: currentCount,
-          isLiked: currentLikeState
+      // Rollback on error
+      setWorks(prev => prev.map(work => {
+        if (work.id === workId) {
+          return {
+            ...work,
+            userHasLiked: currentLikeState,
+            likes: currentLikeState 
+              ? work.likes || []
+              : (work.likes || []).filter(like => like.userId !== user.id)
+          };
         }
+        return work;
       }));
+      
+      // Re-apply filters with rolled back data
+      applyFilters(
+        works.map(w => w.id === workId ? {
+          ...w,
+          userHasLiked: currentLikeState,
+          likes: currentLikeState 
+            ? w.likes || []
+            : (w.likes || []).filter(like => like.userId !== user.id)
+        } : w),
+        selectedMediaTypes,
+        sortBy
+      );
     }
   };
 
   // RENDER FUNCTIONS
 
   const renderWorkItem = ({ item }: { item: CreativeWork }) => {
-    const likeInfo = likeData[item.id] || { count: 0, isLiked: false };
-    const commentCount = commentData[item.id] || 0;
+    const likeInfo = {
+      count: item.likes?.length || 0,
+      isLiked: item.userHasLiked || false
+    };
+    
+    const commentCount = item.comments?.length || 0;
     
     return (
       <WorkCard
@@ -349,7 +394,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
                       : theme.palette.neutral[100]
                     }
                   ]}
-                  onPress={() => setSortBy(option)}
+                  onPress={() => handleSortChange(option)}
                 >
                   <ThemedText type="body" style={[
                     styles.sortOptionText,
@@ -379,18 +424,18 @@ const GalleryScreen = ({ navigation, route }: Props) => {
   );
 
   // Loading state
-if (loading && works.length === 0) {
-  return (
-    <View style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
-      <FlatList
-        data={[1, 2, 3]} // Show 3 skeleton cards
-        renderItem={() => <WorkCardSkeleton />}
-        contentContainerStyle={styles.galleryList}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
-  );
-}
+  if (loading && works.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
+        <FlatList
+          data={[1, 2, 3]} // Show 3 skeleton cards
+          renderItem={() => <WorkCardSkeleton />}
+          contentContainerStyle={styles.galleryList}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colorRoles.ui.background }]}>
@@ -421,7 +466,7 @@ if (loading && works.length === 0) {
         }
         ListEmptyComponent={
           <GalleryEmptyState 
-            onUploadPress={() => navigateToUpload}
+            onUploadPress={handleNavigateToUpload}
           />
         }
         removeClippedSubviews={true}
@@ -431,39 +476,14 @@ if (loading && works.length === 0) {
       
       {/* Filter Modal */}
       {renderFilterModal()}
-      
-      {/* Upload FAB */}
-      {/* <TouchableOpacity 
-        style={[styles.uploadFab, { backgroundColor: theme.colorRoles.art.create }]}
-        onPress={handleUploadPress}
-        activeOpacity={0.8}
-      >
-        <Icons.Upload size={28} color={theme.colorRoles.ui.text.inverse} />
-      </TouchableOpacity> */}
-      
     </View>
   );
 };
 
-// STYLES
+// STYLES (keep your existing styles)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-  },
-  headerTitle: {
-    color: '#581c87', // Your deep purple
-  },
-  filterButton: {
-    padding: 8,
   },
   activeFilters: {
     paddingHorizontal: 20,
@@ -471,68 +491,8 @@ const styles = StyleSheet.create({
   },
   galleryList: {
     paddingHorizontal: 12,
-    paddingBottom: 80, // Space for bottom nav
+    paddingBottom: 80,
   },
-  workCard: {
-    marginVertical: 8,
-    marginHorizontal: 12,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: 'white',
-    // Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  workImage: {
-    width: '100%',
-    height: width, // Square aspect ratio
-    backgroundColor: '#f3f4f6',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionCount: {
-    marginLeft: 4,
-  },
-  metadata: {
-    padding: 16,
-  },
-  workTitle: {
-    marginBottom: 4,
-  },
-  artistName: {
-    color: '#3b82f6', 
-  },
-  loadingText: {
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    padding: 40,
-    marginTop: 40,
-  },
-  emptyText: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    textAlign: 'center',
-  },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -595,22 +555,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-  },
-  uploadFab: {
-    position: 'absolute',
-    bottom: 90, // Above the bottom nav
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });
 

@@ -1,7 +1,7 @@
 // lib/supabase.ts - FIXED VERSION
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { loggingService } from '../services/loggingService';
 
 // SAFE environment variable access with fallbacks
 const getSupabaseConfig = () => {
@@ -32,6 +32,7 @@ export const getSupabase = () => {
     const config = getSupabaseConfig();
     
     if (!config) {
+      loggingService.log('warn', 'supabase', 'init', 'Using mock client - missing config');
       // Return a mock client that won't crash the app
       console.warn('⚠️ Using mock Supabase client due to missing config');
       supabaseClient = {
@@ -39,11 +40,36 @@ export const getSupabase = () => {
           setSession: async () => ({ data: null, error: new Error('No config') }),
           getSession: async () => ({ data: { session: null }, error: null }),
           onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-          signOut: async () => ({ error: null })
+          signOut: async () => ({ error: null }),
+          getUser: async () => ({ data: { user: null }, error: null })
+        },
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: new Error('Mock client') }),
+              single: async () => ({ data: null, error: new Error('Mock client') })
+            })
+          }),
+          insert: () => ({
+            select: () => ({
+              single: async () => ({ data: null, error: new Error('Mock client') })
+            })
+          }),
+          delete: () => ({
+            eq: () => ({})
+          })
+        }),
+        storage: {
+          from: () => ({
+            upload: async () => ({ data: null, error: new Error('Mock client') }),
+            getPublicUrl: () => ({ data: { publicUrl: '' } }),
+            remove: async () => ({ error: null })
+          })
         }
       };
     } else {
       // Create real client
+      
       supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
         auth: {
           persistSession: true,
@@ -71,10 +97,13 @@ export const getSupabase = () => {
       
       console.log('✅ Supabase client initialized successfully');
     }
+    supabaseClient = loggingService.createSupabaseLogger(supabaseClient);
+    
+    loggingService.log('info', 'supabase', 'init', 'Client initialized successfully');
   }
   
   return supabaseClient;
 };
 
 // For backward compatibility
-export const supabase = getSupabase();
+//export const supabase = getSupabase();
