@@ -27,7 +27,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "art.forkart.app",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to take photos for upload.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select images for upload.",
@@ -53,6 +53,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-secure-store",
       [
         "expo-image-picker",
