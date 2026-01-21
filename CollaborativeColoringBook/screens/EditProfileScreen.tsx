@@ -15,6 +15,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api/users';
 import { authService } from '../services/authService';
+import { appCache } from '../utils/cache';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 

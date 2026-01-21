@@ -209,6 +209,51 @@ export const navigateToUpload = (
     }, 100);
   };
 
+  export const navigateToUploadFromProfile = (
+    navigation: AppNavigation,
+    user: any,
+    params?: any
+  ) => {
+    console.log('🚀 Profile → Upload navigation');
+    
+    if (!user) {
+      navigation.navigate('Auth', {
+        message: 'Sign in to upload artwork',
+        redirectTo: 'Upload',
+        redirectParams: params
+      });
+      return;
+    }
+    
+    // Use a dispatch to properly handle nested navigation
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 1,
+        routes: [
+          // First route: Go to MainTabs
+          { 
+            name: 'MainTabs',
+            state: {
+              routes: [
+                // Set UploadTab as active
+                { name: 'UploadTab' }
+              ]
+            }
+          },
+          // Second route: Within UploadTab, go to Upload
+          { 
+            name: 'Upload',
+            state: {
+              routes: [
+                { name: 'Upload', params }
+              ]
+            }
+          }
+        ]
+      })
+    );
+  };
+
   export const NavigationCoordinator = {
     navigateToUploadForRemix: (
       navigation: AnyNavigation,
@@ -291,6 +336,8 @@ export const navigateToUpload = (
       );
     }
   };
+
+
 
 // ============ ARTWORK DETAIL NAVIGATION ============
 export const navigateToArtworkDetail = (

@@ -69,7 +69,7 @@ export const HeartButton: React.FC<HeartButtonProps> = ({
       <Text style={[
         styles.icon,
         {
-          fontSize: currentSize.icon,
+          fontSize: currentSize.text,
           color: currentVariant.iconColor,
           marginRight: currentSize.spacing,
         }

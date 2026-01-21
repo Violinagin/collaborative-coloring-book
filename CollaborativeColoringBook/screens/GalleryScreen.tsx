@@ -77,7 +77,7 @@ const GalleryScreen = ({ navigation, route }: Props) => {
     if (isFocused) {
       loadWorks();
     }
-  }, [isFocused, user]);
+  }, [isFocused]);
 
   // Watch for param changes
   useEffect(() => {

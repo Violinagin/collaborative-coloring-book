@@ -3,12 +3,39 @@ import { getSupabase } from '../../lib/supabase';
 import { User } from '../../types/core';
 import { transformDatabaseUser, createFallbackUser } from '../../utils/transformers';
 
-let getUserCallCount = 0;
+let getUserCalls = 0;
 const getUserCallers = new Map<string, number>();
-
+let callCounter = 0;
+const caller = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
+console.log(`🔍 getUser called from: ${caller}`, {  });
+const userCache = new Map<string, { user: User; timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds
+const activeProfileRequests = new Map<string, Promise<User>>();
 
 export const userService = {
   async getUser(userId: string): Promise<User> {
+    const callId = ++getUserCalls;
+    
+    // Get the full stack trace
+    const stack = new Error().stack || '';
+    
+    // Look for React component names in the stack
+    const stackLines = stack.split('\n');
+    const callerInfo = stackLines.slice(2, 6).join(' | '); // Skip first 2 lines
+    
+    console.log(`🔍 [${callId}] getUser called by:`, {
+      userId,
+      timestamp: new Date().toISOString(),
+      caller: callerInfo
+    });
+    const cached = userCache.get(userId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log('📦 Using cached user data');
+      return cached.user;
+    }
+    
+    const callId2 = ++callCounter;
+    console.log(`🔍 [${callId2}] getUser START - userId: ${userId}`);
     try {
       if (!userId || userId === 'undefined' || userId === 'null') {
         console.log('🚫 Skipping getUser: invalid userId', userId);
@@ -24,6 +51,16 @@ export const userService = {
 
       console.log('🔍 Query result:', { data: !!data, error });
 
+
+      if (data) {
+        const transformed = transformDatabaseUser(data);
+        // Cache it
+        userCache.set(userId, { 
+          user: transformed, 
+          timestamp: Date.now() 
+        });
+        return transformed;
+      }
       if (error) {
         console.error('❌ Query error:', error);
         return createFallbackUser(userId);
@@ -35,41 +72,58 @@ export const userService = {
       }
 
       return transformDatabaseUser(data);
-      
+      console.log(`🔍 [${callId}] getUser END - userId: ${userId}`);
     } catch (error) {
       console.error('❌ Unexpected error:', error);
       return createFallbackUser(userId);
     }
   },
+  
+  // Clear cache when user updates their profile
+  clearUserCache(userId: string) {
+    userCache.delete(userId);
+  },
 
   // Lean profile fetch (no social data)
   async getProfile(userId: string): Promise<User> {
-    try {
-      if (!userId) {
-        return createFallbackUser('unknown');
-      }
-
-      const supabase = getSupabase();
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, username, display_name, avatar_url, bio, roles, created_at')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) {
-        console.warn('⚠️ Profile fetch error:', error.message);
-        return createFallbackUser(userId);
-      }
-
-      if (!data) {
-        return createFallbackUser(userId);
-      }
-
-      return transformDatabaseUser(data);
-    } catch (error) {
-      console.warn('⚠️ Unexpected profile fetch error:', error);
-      return createFallbackUser(userId);
+    // ⭐ Check for active request
+    if (activeProfileRequests.has(userId)) {
+      console.log('⏳ Returning existing getProfile promise');
+      return activeProfileRequests.get(userId)!;
     }
+    
+    console.log(`🔍 Starting new getProfile for: ${userId}`);
+    
+    // Create the request
+    const requestPromise = (async () => {
+      try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, username, display_name, avatar_url, bio, roles, created_at')
+          .eq('id', userId)
+          .maybeSingle();
+
+        console.log('🔍 getProfile query complete:', { hasData: !!data });
+        
+        if (error || !data) {
+          return createFallbackUser(userId);
+        }
+        
+        return transformDatabaseUser(data);
+      } catch (error) {
+        console.error('❌ getProfile error:', error);
+        return createFallbackUser(userId);
+      } finally {
+        // Clean up
+        activeProfileRequests.delete(userId);
+      }
+    })();
+    
+    // Store the promise
+    activeProfileRequests.set(userId, requestPromise);
+    
+    return requestPromise;
   },
 
   // Basic user info (for dropdowns, mentions, etc)

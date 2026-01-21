@@ -47,7 +47,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const handleFilterPress = () => {
-    console.log('🔘 Filter button pressed');
     
     // Option 1: Use callback if provided
     if (onFilterPress) {
@@ -70,7 +69,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   // Dynamic styles that depend on props/state
   const dynamicStyles = {
     container: {
-      backgroundColor: theme.colorRoles.ui.card,
+      backgroundColor: theme.colorRoles.ui.header,
       borderBottomColor: theme.colorRoles.ui.border,
       paddingTop: headerPaddingTop,
     },
@@ -177,7 +176,7 @@ const styles = StyleSheet.create({
   },
   leftSection: {
     width: 44,
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   centerSection: {
@@ -186,7 +185,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rightSection: {
-    flexDirection: 'row', // Moved from render to here
+    flexDirection: 'row', 
     alignItems: 'center',
     justifyContent: 'flex-end',
     width: 88, // Fixed width for right section
@@ -199,8 +198,10 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: '600',
-    fontSize: 17,
+    fontSize: 30,
     textAlign: 'center',
+    paddingTop: 10,
+    color: '#fff',
   },
   filterButton: {
     padding: 8,

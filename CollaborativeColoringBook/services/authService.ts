@@ -222,69 +222,23 @@ let lastAuthCheck = 0;
 const AUTH_CHECK_COOLDOWN = 5000;
 
 export const initializeAuth = async () => {
+  
   // Prevent multiple simultaneous initializations
   if (authInitializationInProgress) {
     console.log('⏳ Auth initialization already in progress');
     return null;
   }
   
-  
-  try {
-    console.log('🔄 Starting auth initialization...');
-    const token = await getAuthToken();
-    const userSession = await getUserSession();
-    
-    // Early return if no token
-    if (!token || !userSession) {
-      console.log('🚫 No auth data found');
-      return null;
-    }
-    
-    console.log('🔑 Found stored token and session');
-    
-    // Get supabase client
-    const supabase = getSupabase();
-    
-    try {
-      const { data, error } = await supabase.auth.setSession({
-        access_token: token,
-        refresh_token: ''
-      });
-      
-      console.log('🔄 Session restoration result:', { 
-        hasData: !!data, 
-        hasError: !!error,
-        errorMessage: error?.message 
-      });
-      
-      // Return what we have
-      return { 
-        user: userSession, 
-        token, 
-        supabaseRestored: !error,
-        supabaseError: error 
-      };
-    } catch (supabaseError) {
-      console.error('⚠️ Supabase session restore failed:', supabaseError);
-      return { 
-        user: userSession, 
-        token, 
-        supabaseRestored: false,
-        supabaseError 
-      };
-    }
-  } catch (error) {
-    console.error('❌ Error in initializeAuth:', error);
-    return null;
-  } finally {
-    // This ALWAYS runs, whether try succeeds or catch catches an error
-    authInitializationInProgress = false;
-  };
-  
-  // Rate limiting
+  // Rate limiting check
   const now = Date.now();
   if (now - lastAuthCheck < AUTH_CHECK_COOLDOWN) {
     console.log('⏳ Auth check too soon, using cache');
+    return null;
+  }
+  
+  // Prevent multiple initializations
+  if (authInitializationInProgress) {
+    console.log('⏳ Auth initialization already in progress');
     return null;
   }
   
@@ -341,5 +295,5 @@ export const initializeAuth = async () => {
   } finally {
     // This ALWAYS runs, whether try succeeds or catch catches an error
     authInitializationInProgress = false;
-  }
-};
+  };
+}

@@ -57,7 +57,7 @@ const LikeButton = ({
         activeOpacity={0.7}
       >
         <Text style={[styles.buttonText, { fontSize: sizeStyles[size].fontSize }]}>
-          {isLiked ? '❤️' : '🤍'} {likeCount}
+          {isLiked ? '💜' : '🤍'} {likeCount}
         </Text>
       </TouchableOpacity>
     </Animated.View>

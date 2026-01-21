@@ -20,10 +20,11 @@ import { AlertModal } from '../components/AlertModal';
 import MediaTypeBadge from '../components/MediaTypeBadge';
 import { ProfileScreenProps } from '../types/navigation';
 import { 
-  navigateToUpload, 
   navigateToArtworkDetail, 
-  navigateToGallery 
+  navigateToGallery, 
+  navigateToUploadFromProfile
 } from '../utils/navigation';
+import { appCache } from '../utils/cache';
 
 type Props = ProfileScreenProps;
 
@@ -46,6 +47,7 @@ const ProfileScreen = ({ route, navigation }: Props) => {
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
   const [refreshing, setRefreshing] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0);
 
   // Context
   const { user: currentUser, signOut } = useAuth();
@@ -94,34 +96,74 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     navigateToArtworkDetail(navigation, workId);
   }, [navigation]);
 
-  // ========== DATA LOADING ==========
+  // ========== CACHE-AWARE DATA LOADING ==========
 
-  const loadUserProfile = useCallback(async (targetUserId: string) => {
-    console.log('🔍 Loading profile for:', targetUserId);
+  const loadUserProfile = useCallback(async (targetUserId: string, forceRefresh: boolean = false) => {
+    console.log('🔍 Loading profile for:', targetUserId, forceRefresh ? '(forced)' : '(cached)');
     
     if (!targetUserId) {
       console.log('❌ No targetUserId provided');
       return;
     }
+
+    // ⭐ QUICK RETURN if already loading this user
+  if (loading && profileUser?.id === targetUserId) {
+    console.log('⏳ Already loading this profile');
+    return;
+  }
     
     try {
       setLoading(true);
       setLoadFailed(false);
       
-      // Load user data
-      const userData = await userService.getUser(targetUserId);
+      // ⭐ STEP 1: Check cache for user data
+      let userData: User | null = null;
+      
+      if (!forceRefresh) {
+        // Try to get from cache first
+        userData = appCache.getUser(targetUserId);
+        if (userData) {
+          console.log('📦 Using cached user data for:', targetUserId);
+        }
+      }
+      
+      // ⭐ STEP 2: If not in cache or forced refresh, fetch from service
+      if (!userData) {
+        if (targetUserId === currentUser?.id && currentUser) {
+          // Use current user from context (always fresh)
+          userData = currentUser;
+          console.log('👤 Using current user from context');
+        } else {
+          // Fetch from service
+          console.log('🌐 Fetching user data from service');
+          userData = await userService.getUser(targetUserId);
+        }
+        
+        // Cache the result (unless it's a fallback user)
+        if (userData && !userData.username?.startsWith('user_')) {
+          appCache.setUser(targetUserId, userData);
+          setDataVersion(v => v + 1); // Trigger re-render
+        }
+      }
+      
       setProfileUser(userData);
       
-      // Load artworks
+      // ⭐ STEP 3: Load user artworks with caching
       let userArtworks: CreativeWork[] = [];
-    try {
-      userArtworks = await worksService.getUserArtworks(targetUserId);
-    } catch (artError) {
-      console.warn('⚠️ Could not load user artworks:', artError);
-      userArtworks = [];
-    }
+      try {
+        console.log('🌐 Fetching user artworks');
+        userArtworks = await worksService.getUserArtworks(targetUserId);
+        
+        // Cache individual artworks
+        userArtworks.forEach(artwork => {
+          appCache.setArtwork(artwork.id, artwork);
+        });
+      } catch (artError) {
+        console.warn('⚠️ Could not load user artworks:', artError);
+        userArtworks = [];
+      }
       
-      // Filter works
+      // ⭐ STEP 4: Filter works (no cache needed for this)
       const originals = userArtworks.filter(artwork => 
         !artwork.originalWorkId
       );
@@ -132,40 +174,45 @@ const ProfileScreen = ({ route, navigation }: Props) => {
       );
       setUserRemixes(remixes);
 
-      // Load social data
+      // ⭐ STEP 5: Load social data (less critical, can fail silently)
       try {
-      if (currentUser && currentUser.id !== targetUserId) {
-        const followingStatus = await socialService.isFollowing(currentUser.id, targetUserId);
-        setIsFollowing(followingStatus);
+        if (currentUser && currentUser.id !== targetUserId) {
+          const followingStatus = await socialService.isFollowing(currentUser.id, targetUserId);
+          setIsFollowing(followingStatus);
+        }
+        
+        const [followers, following] = await Promise.all([
+          socialService.getFollowerCount(targetUserId),
+          socialService.getFollowingCount(targetUserId)
+        ]);
+        
+        setFollowerCount(followers);
+        setFollowingCount(following);
+      } catch (socialError) {
+        console.warn('⚠️ Social data failed:', socialError);
       }
       
-      const [followers, following] = await Promise.all([
-        socialService.getFollowerCount(targetUserId),
-        socialService.getFollowingCount(targetUserId)
-      ]);
-      
-      setFollowerCount(followers);
-      setFollowingCount(following);
-    } catch (socialError) {
-      console.warn('⚠️ Social data failed:', socialError);
+    } catch (error) {
+      console.error('💥 Critical error loading profile:', error);
+      setLoadFailed(true);
+      showAlert('Error', 'Failed to load user profile.', 'error');
+    } finally {
+      setLoading(false);
     }
-    
-  } catch (error) {
-    console.error('💥 Critical error loading profile:', error);
-    setLoadFailed(true);
-    showAlert('Error', 'Failed to load user profile.', 'error');
-  } finally {
-    setLoading(false);
-  }
-}, [currentUser, showAlert]);
+  }, [currentUser, showAlert]);
 
   const onRefresh = useCallback(async () => {
     if (!profileUserId) return;
+    console.log('🔄 Force refreshing profile data');
     setRefreshing(true);
-    await loadUserProfile(profileUserId);
+    
+    // Clear cache for this user before refreshing
+    appCache.clearUser(profileUserId);
+    
+    await loadUserProfile(profileUserId, true);
     setRefreshing(false);
   }, [profileUserId, loadUserProfile]);
-
+  
   // ========== EFFECTS ==========
 
   // Set navigation title
@@ -484,48 +531,54 @@ const ProfileScreen = ({ route, navigation }: Props) => {
     if (currentTabData.length > 0) return null;
     
     let message = '';
-    let showButton = false;
-    let buttonText = '';
-    let buttonAction = () => {};
+    let hintText = '';
+    let emoji = '';
 
     switch (activeTab) {
       case 'originals':
         message = isOwnProfile 
-          ? "You haven't uploaded any original works yet!" 
+          ? "You haven't uploaded any original works yet!"
           : "No original works uploaded yet";
-        showButton = isOwnProfile;
-        buttonText = "Create Your First Original";
-        buttonAction = () => navigateToUpload(navigation, currentUser);
+          hintText = isOwnProfile 
+          ? "Use the + button below to upload your first piece!" 
+          : "";
+          emoji = isOwnProfile ? '🎨' : '📁';
         break;
       case 'remixes':
         message = isOwnProfile 
-          ? "You haven't remixed any work yet" 
-          : "No remixes yet";
-        showButton = isOwnProfile;
-        buttonText = "Browse Work to Remix";
-        buttonAction = () => navigateToGallery(navigation);
-        break;
+        ? "You haven't created any remixes yet" 
+        : "No remixes yet";
+        emoji = isOwnProfile ? '🔄' : '📁';
+      
+      hintText = isOwnProfile
+        ? "Browse the Gallery tab to find artwork to remix"
+        : "";
+      break;
       case 'activity':
         message = isOwnProfile 
-          ? "Your activity feed will show likes, comments, and follows" 
+          ? "Your activity feed will (soon) show likes, comments, and follows" 
           : "Activity feed coming soon";
-        showButton = isOwnProfile;
-        buttonText = "Explore the community";
-        buttonAction = () => navigateToGallery(navigation);
+          hintText = isOwnProfile
+          ? "Browse the Gallery tab to expolore the community and find artwork to remix!"
+          : "";
+          emoji = isOwnProfile ? '📱' : '⏳';
         break;
+        default:
+          message = "No content available";
+          hintText = "";
+          emoji = '📁';
     }
 
     return (
       <View style={styles.emptyStateContainer}>
+        <Text style={styles.emptyStateEmoji}>{emoji}</Text>
         <Text style={styles.emptyStateText}>{message}</Text>
-        {showButton && (
-          <TouchableOpacity 
-            style={styles.uploadPrompt}
-            onPress={buttonAction}
-          >
-            <Text style={styles.uploadPromptText}>{buttonText}</Text>
-          </TouchableOpacity>
-        )}
+        {isOwnProfile && hintText ? (
+        <View style={styles.hintContainer}>
+          <Text style={styles.hintArrow}>👇</Text>
+          <Text style={styles.hintText}>{hintText}</Text>
+        </View>
+      ) : null}
       </View>
     );
   }, [activeTab, currentTabData.length, isOwnProfile, currentUser, navigation]);
@@ -931,6 +984,8 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: 4,
     aspectRatio: 1,
+    marginBottom: 10,
+    paddingBottom: 10,
   },
   artworkImage: {
     width: '100%',
@@ -1068,6 +1123,30 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+  },
+  hintText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  hintContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: 'rgba(0, 122, 255, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 122, 255, 0.1)',
+    maxWidth: 300,
+  },
+  hintArrow: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  emptyStateEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
   },
 });
 

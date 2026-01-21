@@ -101,6 +101,7 @@ export const palette = {
       background: palette.neutral[50],
       card: '#ffffff',
       border: palette.neutral[200],
+      header: palette.neutral[400],
       
       text: {
         primary: palette.neutral[900],
