@@ -5,12 +5,17 @@
   "scripts": {
     "env:check": "node check-environment.js",
     "dev": "./start-dev",
-    "start": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --clear --max-workers=1",
+    "start": "./start-dev.js",
     "start:lan": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --lan --clear --max-workers=1",
     "start:auto": "node -e \"const os = require('os'); const ifaces = os.networkInterfaces(); let ip = 'localhost'; Object.keys(ifaces).forEach(iface => { ifaces[iface].forEach(addr => { if (addr.family === 'IPv4' && !addr.internal) ip = addr.address; }); }); console.log('Using IP:', ip); process.env.REACT_NATIVE_PACKAGER_HOSTNAME = ip; require('child_process').spawn('npx', ['expo', 'start', '--lan', '--clear', '--max-workers=1'], { stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: '--require ./preload-polyfills.js', EXPO_NO_TELEMETRY: '1' } });\"",
-    "start:ipad": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --tunnel --clear",
-    "start:clean": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-* .expo node_modules/.cache && npm start",
-    "start:tunnel": "npm run start:ipad",
+    "start:dev": "./start-dev.js",
+    "start:clean": "./start-dev.js --clear",
+    "start:tunnel": "./start-dev.js --tunnel",
+    "start:ios": "./start-dev.js --ios",
+    "start:android": "./start-dev.js --android",
+    "start:mac": "EXPO_NO_TELEMETRY=1 METRO_MAX_WORKERS=1 NODE_OPTIONS='--max-old-space-size=4096' ./start-dev.js",
+    "start:ipad": "./start-dev.js --tunnel",
+    "start:codespaces": "./start-dev.js --tunnel",
     "clean": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-* .expo node_modules/.cache",
     "android": "expo start --android",
     "ios": "expo run:ios",
@@ -21,7 +26,8 @@
     "submit:android": "eas submit --platform android",
     "type-check": "tsc --noEmit",
     "reset": "rm -rf node_modules .expo && npm install && npm run clean",
-    "doctor": "expo doctor"
+    "doctor": "expo doctor",
+    "quick-reset": "rm -rf .expo && expo start --clear"
   },
   "dependencies": {
     "@emotion/native": "^11.11.0",
