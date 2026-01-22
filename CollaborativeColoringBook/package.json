@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "main": "app-polyfills.js",
   "scripts": {
-      "start": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --clear --max-workers=1",
-      "start:lan": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=192.168.4.22 npx expo start --lan --clear --max-workers=1",
-      "start:ipad": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --tunnel --clear",
-      "clean": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-* .expo node_modules/.cache",
-      "dev": "npm run clean && npm start",
+    "env:check": "node check-environment.js",
+    "dev": "./start-dev",
+    "start": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --clear --max-workers=1",
+    "start:lan": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --lan --clear --max-workers=1",
+    "start:auto": "node -e \"const os = require('os'); const ifaces = os.networkInterfaces(); let ip = 'localhost'; Object.keys(ifaces).forEach(iface => { ifaces[iface].forEach(addr => { if (addr.family === 'IPv4' && !addr.internal) ip = addr.address; }); }); console.log('Using IP:', ip); process.env.REACT_NATIVE_PACKAGER_HOSTNAME = ip; require('child_process').spawn('npx', ['expo', 'start', '--lan', '--clear', '--max-workers=1'], { stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: '--require ./preload-polyfills.js', EXPO_NO_TELEMETRY: '1' } });\"",
+    "start:ipad": "NODE_OPTIONS=\"--require ./preload-polyfills.js\" EXPO_NO_TELEMETRY=1 npx expo start --tunnel --clear",
+    "start:clean": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-* .expo node_modules/.cache && npm start",
+    "start:tunnel": "npm run start:ipad",
+    "clean": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-* .expo node_modules/.cache",
     "android": "expo start --android",
     "ios": "expo run:ios",
     "web": "expo start --web",
@@ -15,7 +19,9 @@
     "build:android": "eas build --platform android",
     "submit:ios": "eas submit --platform ios",
     "submit:android": "eas submit --platform android",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "reset": "rm -rf node_modules .expo && npm install && npm run clean",
+    "doctor": "expo doctor"
   },
   "dependencies": {
     "@emotion/native": "^11.11.0",

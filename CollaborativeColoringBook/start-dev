@@ -1,9 +1,55 @@
 #!/bin/bash
-# Clean and start
-rm -rf $TMPDIR/metro-* 2>/dev/null
-rm -rf .expo 2>/dev/null
+# start-dev - Universal development starter
+set -e  # Exit on error
 
-NODE_OPTIONS="--require ./preload-polyfills.js" \
-EXPO_NO_TELEMETRY=1 \
-REACT_NATIVE_PACKAGER_HOSTNAME=192.168.4.22 \
-npx expo start --lan --clear --max-workers=1
+echo "🚀 ForkArt Development Starter"
+echo "=============================="
+
+# Cleanup
+echo "🧹 Cleaning caches..."
+rm -rf $TMPDIR/metro-* 2>/dev/null || true
+rm -rf $TMPDIR/haste-* 2>/dev/null || true
+rm -rf .expo 2>/dev/null || true
+
+# Detect environment
+LOCAL_IP=$(node -e "
+const os = require('os');
+const interfaces = os.networkInterfaces();
+for (const ifaceName in interfaces) {
+  for (const iface of interfaces[ifaceName]) {
+    if (iface.family === 'IPv4' && !iface.internal) {
+      console.log(iface.address);
+      process.exit(0);
+    }
+  }
+}
+console.log('localhost');
+")
+
+echo "📡 Detected IP: $LOCAL_IP"
+
+# Check if we're on your specific Mac
+if [[ "$LOCAL_IP" == "192.168.4.22" ]] && [[ "$OSTYPE" == "darwin"* ]]; then
+  echo "🖥️  Detected your development Mac"
+  COMMAND="npm run start:lan"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+  # Mac but not your specific one
+  echo "💻 Detected Mac"
+  COMMAND="npm start"
+elif [[ -n "$CODESPACES" ]] || [[ -n "$GITHUB_CODESPACE" ]]; then
+  echo "🌐 Detected Codespaces"
+  COMMAND="npm run start:ipad"
+elif [[ "$OSTYPE" == "linux"* ]] && [[ $(uname -m) == *"arm"* ]]; then
+  echo "📱 Detected iPad/Linux ARM"
+  COMMAND="npm run start:ipad"
+else
+  echo "🖥️  Generic environment"
+  COMMAND="npm start"
+fi
+
+echo ""
+echo "🔧 Running: $COMMAND"
+echo "=============================="
+
+# Execute the command
+eval $COMMAND
