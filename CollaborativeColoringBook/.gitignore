@@ -10,6 +10,7 @@ node_modules/
 dist/
 web-build/
 expo/
+tmp/
 
 # Native
 .kotlin/
@@ -35,6 +36,13 @@ yarn-error.*
 # dotenv environment variables file
 .env
 .env.production
+.env.mac
+.env.pc
+.env.ipad
+.env.backup
+.env.*.local
+!/.env.example
+EOF
 
 # local env files
 .env*.local
@@ -50,3 +58,15 @@ yarn-error.*
 .oldsql.md
 ignore/
 .expo/
+
+# Production
+build/
+.eas/
+
+# Misc
+.DS_Store
+*.pem
+*.p12
+*.key
+*.mobileprovision
+*.orig
