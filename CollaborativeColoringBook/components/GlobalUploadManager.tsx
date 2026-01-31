@@ -1,7 +1,7 @@
 // components/GlobalUploadManager.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
-import { storageService } from '../services/storageService';
+import { storageService } from '../services/upload/storageService';
 
 export const GlobalUploadManager = () => {
   const [activeUploads, setActiveUploads] = useState<string[]>([]);

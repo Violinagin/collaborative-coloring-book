@@ -1,11 +1,12 @@
 // navigation/RootNavigator.tsx - COMPLETE VERSION
-import React from 'react';
+import React, { useState, useEffect }  from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import all screen components
 import GalleryScreen from '../screens/GalleryScreen';
@@ -16,6 +17,7 @@ import CreateRemixScreen from '../screens/CreateRemixScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import AuthScreen from '../screens/AuthScreen';
 import ThemePreviewScreen from '../screens/ThemePreviewScreen';
+import AgeGateScreen from '../screens/AgeGateScreen';
 
 // Import navigation types
 import { 
@@ -182,24 +184,6 @@ function PublicStack() {
       </RootStack.Navigator>
     );
   }  
-  
-//   function ProfileStack() {
-//     return (
-//       <RootStack.Navigator
-//         screenOptions={{
-//           header: (props) => <CustomStackHeader {...props} />,
-//         }}
-//       >
-//         <RootStack.Screen 
-//           name="Profile" 
-//           component={ProfileScreen}
-//           initialParams={{ userId: undefined }}
-//         />
-//         <RootStack.Screen name="EditProfile" component={EditProfileScreen} />
-//         <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
-//       </RootStack.Navigator>
-//     );
-//   }
 
 // ============ MAIN TAB NAVIGATOR ============
 
@@ -257,45 +241,66 @@ function MainTabNavigator() {
   );
 }
 
-// // ============ PUBLIC ONLY NAVIGATOR (NEW) ============
-
-// function PublicOnlyNavigator() {
-//     return (
-//         <RootStack.Navigator
-//         screenOptions={{
-//           header: (props) => <CustomStackHeader {...props} />,
-//         }}
-//       >
-//         {/* Public screens only - no tabs */}
-//         <RootStack.Screen name="Gallery" component={GalleryScreen} />
-//         <RootStack.Screen name="ArtworkDetail" component={ArtworkDetailScreen} />
-//         <RootStack.Screen 
-//         name="Auth" 
-//         component={AuthScreen}
-//         // Pass initialParams if needed
-//         initialParams={{ message: 'Welcome! Sign in to get started.' }}
-//       />
-//         <RootStack.Screen 
-//         name="ArtistProfile" 
-//         component={ProfileScreen}
-//       />
-//         {/* Development */}
-//         {__DEV__ && (
-//           <RootStack.Screen name="ThemePreview" component={ThemePreviewScreen} />
-//         )}
-//       </RootStack.Navigator>
-//     );
-//   }
-
 // ============ ROOT NAVIGATOR (DECIDES WHICH TO SHOW) ============
 
 function RootNavigator() {
     const { user, loading } = useAuth();
-    
-    if (loading) {
-      return null;
+    const [ageVerified, setAgeVerified] = useState<boolean | null>(null);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+   useEffect(() => {
+  console.log('1. RootNavigator: Checking age verification');
+  checkAgeVerification();
+}, [refreshTrigger]);
+
+const handleAgeVerified = () => {
+  console.log('Triggering re-check of age verification');
+  setRefreshTrigger(prev => prev + 1);
+};
+
+  const checkAgeVerification = async () => {
+    try {
+      const verified = await AsyncStorage.getItem('age_verified');
+      console.log('2. RootNavigator: Storage value =', verified);
+      setAgeVerified(verified === 'true');
+    } catch (error) {
+      console.error('Error checking age verification:', error);
+      setAgeVerified(false);
     }
-    
+  };
+
+  console.log('3. RootNavigator: Current state -', {
+    loading,
+    ageVerified,
+    user: !!user,
+  });
+
+  // Show nothing while checking both auth and age verification
+  if (loading || ageVerified === null) {
+    console.log('4. RootNavigator: Showing loading screen');
+    return null;
+  }
+
+  // Show age gate if not verified
+  if (!ageVerified) {
+  console.log('5. RootNavigator: Showing AgeGateScreen');
+  return (
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Screen name="AgeGate">
+        {(props) => (
+          <AgeGateScreen 
+            {...props} 
+            onAgeVerified={handleAgeVerified} // PASS THIS
+          />
+        )}
+      </RootStack.Screen>
+    </RootStack.Navigator>
+  );
+}
+
+  console.log('6. RootNavigator: Age verified, showing main app');
+
+  // Age is verified, show the main app based on auth state
     return (
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (

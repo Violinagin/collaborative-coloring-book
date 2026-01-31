@@ -12,6 +12,9 @@ export type AuthParams = {
 // ============ ROOT STACK PARAMS ============
 // This is the highest level navigator
 export type RootStackParamList = {
+  // Age gate screen (first thing users see)
+  AgeGate: undefined;
+  
   // Auth screen (shown when not logged in)
   Auth: AuthParams | undefined;
   Public: undefined;
@@ -65,6 +68,9 @@ export type TabParamList = {
 export type GalleryScreenProps = NativeStackScreenProps<RootStackParamList, 'Gallery'>;
 export type ArtworkDetailScreenProps = NativeStackScreenProps<RootStackParamList, 'ArtworkDetail'>;
 export type AuthScreenProps = NativeStackScreenProps<RootStackParamList, 'Auth'>;
+export type AgeGateScreenProps = NativeStackScreenProps<RootStackParamList, 'AgeGate'> & {
+  onAgeVerified?: () => void; // ADD THIS
+};
 export type CreateRemixScreenProps = NativeStackScreenProps<RootStackParamList, 'CreateRemix'>;
 export type UploadScreenProps = NativeStackScreenProps<RootStackParamList, 'Upload'>;
 export type ProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'Profile'>;
