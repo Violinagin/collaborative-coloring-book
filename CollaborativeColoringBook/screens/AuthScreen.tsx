@@ -179,7 +179,7 @@ const handleAlertClose = () => {
           {/* Demo credentials hint */}
           <View style={styles.demoHint}>
             <Text style={styles.demoHintText}>
-              For testing: use any email & simple password
+              Get ready to Remix and Create!
             </Text>
           </View>
         </View>
