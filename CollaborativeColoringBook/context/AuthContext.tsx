@@ -37,6 +37,7 @@ const lastProcessedEvent = useRef<{
   timestamp: number 
 } | null>(null);
 const supabase = getSupabase();
+
 const { data: listenerData } = supabase.auth.onAuthStateChange(
   async (event: AuthChangeEvent, session: Session | null) => {
     console.log(`🎯 Raw auth event: ${event}`);
@@ -46,6 +47,10 @@ const { data: listenerData } = supabase.auth.onAuthStateChange(
     
     if (!eventsToHandle.includes(event)) {
       console.log(`⏭️ Ignoring event: ${event}`);
+      return;
+    }
+    if (event === 'SIGNED_IN' && user?.id === session?.user?.id) {
+      console.log('⏭️ Ignoring duplicate SIGNED_IN for same user');
       return;
     }
     
@@ -75,23 +80,28 @@ const { data: listenerData } = supabase.auth.onAuthStateChange(
     setSession(session);
     
     if (session?.user) {
-      // ⭐ ONLY load profile on SIGNED_IN, not other events
+      // Store auth session (fire-and-forget)
+      storeAuthSession(session).catch(e => 
+        console.log('⚠️ Failed to store session:', e.message)
+      );
+      
+      // Load profile WITHOUT awaiting
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         if (!user || user.id !== session.user.id) {
-          console.log('🎯 Loading profile');
-          await loadLeanUserProfile(session.user.id);
+          console.log('🎯 Loading profile (async)');
+          loadLeanUserProfile(session.user.id);
         } else {
           console.log('🎯 User unchanged, skipping');
         }
-      } else {
-        console.log(`🎯 Event ${event} - not loading profile`);
       }
-      
-      await storeAuthSession(session);
     } else {
-      setUser(null);
-      setLoading(false);
-      await clearAuthSession();
+      // Clear user only on explicit SIGNED_OUT
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        clearAuthSession().catch(e => 
+          console.log('⚠️ Failed to clear session:', e.message)
+        );
+      }
     }
   }
 );
@@ -150,29 +160,20 @@ const { data: listenerData } = supabase.auth.onAuthStateChange(
     console.log('❌ loadLeanUserProfile: No userId provided');
     return;
   }
-console.log('🔍 loadLeanUserProfile called for:', userId);
-  try {
-    // Use getProfile instead of getUser for better performance
-    const userProfile = await userService.getProfile(userId);
-    console.log('✅ loadLeanUserProfile success:', {
-      id: userProfile.id,
-      username: userProfile.username
+  
+  console.log('👤 Loading lean profile for:', userId);
+  
+  // DON'T await! Make it fire-and-forget
+  userService.getProfile(userId)
+    .then(userProfile => {
+      console.log('✅ Profile loaded successfully:', userProfile.username);
+      setUser(userProfile);
+    })
+    .catch(error => {
+      console.log('⚠️ Profile load failed (non-critical):', error.message);
+      // Don't set user to null! Keep whatever state we have
+      // The user is still authenticated even if profile fails
     });
-    setUser(userProfile);
-  } catch (error) {
-    console.error('❌ Error in loadLeanUserProfile:', error);
-    // Always create a fallback user
-    // const fallbackUser: User = {
-    //   id: userId,
-    //   username: `user_${userId.slice(0, 8)}`,
-    //   displayName: 'New User',
-    //   avatarUrl: undefined,
-    //   bio: undefined,
-    //   roles: ['supporter'],
-    //   joinedDate: new Date(),
-    // };
-    // setUser(fallbackUser);
-  }
 };
 
   useEffect(() => {
@@ -190,38 +191,6 @@ console.log('🔍 loadLeanUserProfile called for:', userId);
           setLoading(false);
         }
   
-        // 3. Set up auth state change listener
-        
-// const { data: listenerData } = supabase.auth.onAuthStateChange(
-//   async (event: AuthChangeEvent, session: Session | null) => {
-//     console.log(`🎯 onAuthStateChange FIRED: ${event}`);
-    
-//     // DEBOUNCE: Skip if we're already loading
-//     if (loading) {
-//       console.log('⏳ Skipping - already loading');
-//       return;
-//     }
-//     setSession(session);
-//     if (session?.user) {
-//       // Check if we already have this user loaded AND it's the same session
-//       const shouldLoadUser = !user || user.id !== session.user.id || event === 'SIGNED_IN';
-      
-//       if (shouldLoadUser) {
-//         console.log('🎯 Loading user profile for:', session.user.id);
-//         setLoading(true);
-//         await loadLeanUserProfile(session.user.id);
-//       } else {
-//         console.log('🎯 User already loaded, skipping');
-//       }
-//       await storeAuthSession(session);
-//     } else {
-//       console.log('🎯 No session, clearing user');
-//       setUser(null);
-//       await clearAuthSession();
-//     }
-//     setLoading(false);
-//   }
-// );
 const subscription = listenerData.subscription;
   
         return () => subscription.unsubscribe();
